@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_starttls: bool = True
     smtp_verify: bool = True   # set false for an internal self-signed relay (LAN)
+    smtp_password_file: str = ""  # if set, the SMTP password is read from this file (live sync)
     email_from: str = "Johor Studio <order@johorstudio.com>"
 
     # WhatsApp

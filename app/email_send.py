@@ -38,17 +38,30 @@ def _send(to: str, subject: str, html: str, text: str) -> None:
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
 
+    pw = _smtp_password()
     if settings.smtp_starttls:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as s:
             s.starttls(context=ctx)
             if settings.smtp_user:
-                s.login(settings.smtp_user, settings.smtp_password)
+                s.login(settings.smtp_user, pw)
             s.send_message(msg)
     else:
         with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=30, context=ctx) as s:
             if settings.smtp_user:
-                s.login(settings.smtp_user, settings.smtp_password)
+                s.login(settings.smtp_user, pw)
             s.send_message(msg)
+
+
+def _smtp_password() -> str:
+    """Password from SMTP_PASSWORD_FILE if set (live sync with mail-admin), else env."""
+    if settings.smtp_password_file:
+        try:
+            val = Path(settings.smtp_password_file).read_text(encoding="utf-8").strip()
+            if val:
+                return val
+        except OSError:
+            pass
+    return settings.smtp_password
 
 
 def send_login_code(to: str, code: str) -> None:
