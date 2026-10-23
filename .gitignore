@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Env & secrets
+.env
+*.env
+!.env.example
+google-service-account.json
+secrets/
+
+# Data (runtime) — never commit customer data or DB
+data/db/
+data/cache/
+data/receipts/
+data/trash/
+data/backups/
+data/print/
+*.sqlite
+*.sqlite3
+*.db
+
+# Keep sample seed assets
+!data/seed/
+!data/seed/**
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
