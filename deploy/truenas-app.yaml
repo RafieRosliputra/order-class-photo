@@ -1,0 +1,19 @@
+# TrueNAS SCALE — Custom App compose for "photo-order".
+# Install: Apps -> Discover Apps -> Custom App -> Install via YAML, OR via
+#   midclt call app.create '{"app_name":"photo-order","custom_app":true,
+#     "custom_compose_config_string":"<this file>"}'
+# Build the image on the host first:
+#   docker build -t johorstudio-photo-order:local /mnt/ssd/website-order
+#
+# cloudflared (existing tunnel) routes shop.johorstudio.com -> http://<host>:8099
+services:
+  photo-order:
+    image: johorstudio-photo-order:local
+    pull_policy: never
+    restart: unless-stopped
+    env_file:
+      - /mnt/ssd/website-order/.env
+    ports:
+      - "8099:8000"
+    volumes:
+      - "/mnt/a/storage/website/print purchase:/mnt/a/storage/website/print purchase"
