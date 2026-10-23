@@ -33,14 +33,19 @@ def _send(to: str, subject: str, html: str, text: str) -> None:
     msg.set_content(text)
     msg.add_alternative(html, subtype="html")
 
+    ctx = ssl.create_default_context()
+    if not settings.smtp_verify:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
     if settings.smtp_starttls:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as s:
-            s.starttls(context=ssl.create_default_context())
+            s.starttls(context=ctx)
             if settings.smtp_user:
                 s.login(settings.smtp_user, settings.smtp_password)
             s.send_message(msg)
     else:
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=30) as s:
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=30, context=ctx) as s:
             if settings.smtp_user:
                 s.login(settings.smtp_user, settings.smtp_password)
             s.send_message(msg)

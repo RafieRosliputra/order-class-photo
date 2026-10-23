@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_starttls: bool = True
+    smtp_verify: bool = True   # set false for an internal self-signed relay (LAN)
     email_from: str = "Johor Studio <order@johorstudio.com>"
 
     # WhatsApp
