@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     pay_bank_account_name: str = "PROMEDIA CREATIVE SOLUTIONS"
     pay_bank_account_no: str = ""
 
+    # Dynamic DuitNow QR (generated per order from the static merchant payload)
+    duitnow_enabled: bool = False
+    duitnow_static_payload: str = ""   # EMVCo TLV string decoded from the static QR
+    duitnow_ref_subtag: str = "05"     # Tag 62 subtag for the reference (05 = Reference Label)
+
     # Postage (RM)
     postage_west: float = 10.0
     postage_east: float = 18.0

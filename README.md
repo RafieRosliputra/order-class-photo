@@ -115,10 +115,23 @@ creates one sheet in that folder.
 Point `SMTP_*` at a relay (Zoho / Gmail / SendGrid). `EMAIL_FROM` defaults to
 `order@johorstudio.com`.
 
-## Deferred (discussed, not built here)
+## Dynamic DuitNow QR
 
-- **Dynamic QR** (a QR per order with the amount embedded) — intentionally not built;
-  the pay page shows a static QRPay + bank details and the exact amount.
+The pay page can show a **per-order dynamic DuitNow QR** with the amount and the
+customer's phone embedded (`app/duitnow.py`). It parses the merchant's static QR
+(EMVCo MPM TLV), switches Point-of-Initiation 11→12, sets Tag 54 (amount) and a
+reference in Tag 62, and recomputes the Tag 63 CRC-16.
+
+Enable it by decoding your printed static QR once and setting `DUITNOW_ENABLED=true`
+and `DUITNOW_STATIC_PAYLOAD=<the EMVCo string>` in `.env`. The Bank Muamalat transfer
+option is shown alongside.
+
+> This only **pre-fills** the payer's app — it does **not** auto-confirm payment.
+> Confirmation still comes from the uploaded-receipt OCR flow. Test with a few
+> banks / e-wallets before relying on it in production.
+
+## Deferred (not built here)
+
 - **Screenshot-triggered watermark / watermarking** — moved to a separate project.
 
 ## Notes

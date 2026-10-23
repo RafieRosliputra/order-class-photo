@@ -33,10 +33,17 @@
   {% if overpaid %}<p class="error">{{ t('overpaid_note') }}</p>{% endif %}
 
   <div class="pay-method">
-    <strong>{{ t('pay_qrpay') }} — {{ settings.pay_qrpay_bank }}</strong>
-    {% set qr = event.pay_qrpay_image or settings.pay_qrpay_image %}
-    {% if qr %}<div style="margin-top:8px"><img src="{{ qr }}" alt="QRPay" style="max-width:220px"></div>
-    {% else %}<p class="note">{% if lang=='ms' %}Imbas QRPay {{ settings.pay_qrpay_bank }} dan masukkan jumlah di atas.{% else %}Scan {{ settings.pay_qrpay_bank }} QRPay and key in the amount above.{% endif %}</p>{% endif %}
+    <strong>{{ t('pay_qrpay') }} — DuitNow QR</strong>
+    {% if duitnow_on %}
+      <div style="margin-top:8px;text-align:center">
+        <img src="/order/{{ order.order_no }}/qr.png" alt="DuitNow QR {{ rm(order.total_sen) }}" style="max-width:240px;border:1px solid var(--line);border-radius:12px">
+        <div class="note" style="margin-top:6px">{% if lang=='ms' %}Imbas — amaun {{ rm(order.total_sen) }} &amp; rujukan sudah termasuk.{% else %}Scan — amount {{ rm(order.total_sen) }} &amp; reference are already included.{% endif %}</div>
+      </div>
+    {% else %}
+      {% set qr = event.pay_qrpay_image or settings.pay_qrpay_image %}
+      {% if qr %}<div style="margin-top:8px"><img src="{{ qr }}" alt="QRPay" style="max-width:220px"></div>{% endif %}
+      <p class="note">{% if lang=='ms' %}Imbas QRPay {{ settings.pay_qrpay_bank }} dan masukkan jumlah di atas.{% else %}Scan {{ settings.pay_qrpay_bank }} QRPay and key in the amount above.{% endif %}</p>
+    {% endif %}
   </div>
   <div class="pay-method">
     <strong>{{ t('pay_transfer') }} — {{ settings.pay_bank_name }}</strong>
