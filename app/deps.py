@@ -98,7 +98,7 @@ def render(request: Request, name: str, ctx: dict | None = None):
     }
     if ctx:
         base.update(ctx)
-    return templates.TemplateResponse(name, base)
+    return templates.TemplateResponse(request=request, name=name, context=base)
 
 
 def json_dumps(obj) -> str:
