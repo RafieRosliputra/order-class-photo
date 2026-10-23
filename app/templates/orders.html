@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav_orders') }} — {{ settings.app_name }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav_orders') }}</h1>
+{% if not orders %}
+  <div class="card"><p class="muted">{% if lang=='ms' %}Belum ada order.{% else %}No orders yet.{% endif %}</p></div>
+{% else %}
+<div class="card">
+  {% for o in orders %}
+  <a class="line" style="text-decoration:none;color:inherit" href="/order/{{ o.order_no }}">
+    <div style="flex:1">
+      <div style="font-weight:700">{{ o.event_name }}</div>
+      <div class="note">{{ o.order_no }} · {{ o.created_at }}</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-weight:700">{{ rm(o.total_sen) }}</div>
+      <span class="tag">{{ slabel(o.status) }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

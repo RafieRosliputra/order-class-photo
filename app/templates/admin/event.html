@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ event.name }} — Admin{% endblock %}
+{% block content %}
+<div class="spread"><h1>{{ event.name }}</h1>
+  <a class="btn ghost sm" href="/admin/orders?event={{ event.id }}">Orders</a></div>
+{% if request.query_params.get('import') %}<p class="ok">Import started in background — refresh in a moment.</p>{% endif %}
+
+<div class="grid2">
+  <form method="post" action="/admin/events/{{ event.id }}/edit" class="card stack">
+    <h2>Settings</h2>
+    <div class="field"><label>Name</label><input name="name" value="{{ event.name }}" required></div>
+    <div class="grid2">
+      <div class="field"><label>Event date</label><input name="event_date" type="date" value="{{ event.event_date }}"></div>
+      <div class="field"><label>Close date</label><input name="close_date" type="date" value="{{ event.close_date }}"></div>
+    </div>
+    <div class="field"><label>Status</label>
+      <select name="status"><option value="open" {{ 'selected' if event.status=='open' }}>open</option>
+        <option value="closed" {{ 'selected' if event.status=='closed' }}>closed</option></select></div>
+    <div class="field"><label>Nextcloud folder</label><input name="nextcloud_folder" value="{{ event.nextcloud_folder }}"></div>
+    <div class="field"><label>Class delimiter</label><input name="class_delimiter" value="{{ event.class_delimiter }}"></div>
+    <div class="field"><label>Pickup location</label><input name="pickup_location" value="{{ event.pickup_location }}"></div>
+    <div class="grid2">
+      <div class="field"><label>Bank Muamalat no.</label><input name="pay_bank_no" value="{{ event.pay_bank_no }}"></div>
+      <div class="field"><label>QRPay image URL</label><input name="pay_qrpay_image" value="{{ event.pay_qrpay_image }}"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Postage West (RM)</label><input name="postage_west" value="{{ '%.2f'|format(event.postage_west_sen/100) }}"></div>
+      <div class="field"><label>Postage East (RM)</label><input name="postage_east" value="{{ '%.2f'|format(event.postage_east_sen/100) }}"></div>
+    </div>
+    <button class="btn" type="submit">Save</button>
+  </form>
+
+  <div class="stack">
+    <div class="card stack">
+      <h2>Photos</h2>
+      <p><strong>{{ nphotos }}</strong> photos · <strong>{{ classes|length }}</strong> classes</p>
+      <form method="post" action="/admin/events/{{ event.id }}/import">
+        <button class="btn sand block" type="submit">Import / refresh from Nextcloud</button></form>
+      <p class="note">Reads <code>{{ event.nextcloud_folder or '(set folder)' }}</code> → class subfolders → photos, and builds WebP previews.</p>
+    </div>
+
+    <div class="card stack">
+      <h2>Print session</h2>
+      {% if session %}
+        <p>Active session #{{ session.id }}{% if session.sheet_url %} · <a href="{{ session.sheet_url }}" target="_blank">Google Sheet</a>{% endif %}</p>
+      {% else %}<p class="muted">No active session (next paid order opens a new sheet).</p>{% endif %}
+      <form method="post" action="/admin/events/{{ event.id }}/new-session">
+        <button class="btn ghost block" type="submit">End session → new sheet next time</button></form>
+      <p class="note">Use after clearing the print folder (= new session).</p>
+    </div>
+
+    <div class="card stack">
+      <h2>Sizes &amp; prices</h2>
+      <table>
+        {% for s in sizes %}
+        <tr><td><strong>{{ s.code }}</strong> {{ s.label }}</td><td>{{ rm(s.price_sen) }}</td>
+          <td><form method="post" action="/admin/sizes/{{ s.id }}/delete"><button class="btn ghost sm">✕</button></form></td></tr>
+        {% endfor %}
+      </table>
+      <form method="post" action="/admin/events/{{ event.id }}/sizes" class="row" style="flex-wrap:wrap;gap:8px">
+        <input name="code" placeholder="4R" style="width:80px" required>
+        <input name="label" placeholder="4x6&quot;" style="width:90px">
+        <input name="price" placeholder="RM" style="width:80px" required>
+        <button class="btn sm" type="submit">Add size</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px">
+  <h2>Classes</h2>
+  <table><tr><th>School</th><th>Class</th><th>Folder</th><th>Photos</th></tr>
+  {% for c in classes %}<tr><td>{{ c.school or '—' }}</td><td>{{ c.name }}</td><td class="note">{{ c.folder_path }}</td><td>{{ c.n }}</td></tr>{% endfor %}
+  </table>
+  {% if not classes %}<p class="muted">No classes imported yet.</p>{% endif %}
+</div>
+{% endblock %}

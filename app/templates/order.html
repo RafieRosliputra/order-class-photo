@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}{{ order.order_no }} — {{ settings.app_name }}{% endblock %}
+{% block content %}
+{% set wa = whatsapp_link((event.name ~ ' — ' ~ order.order_no), order.order_no, customer.email, order.phone_used or customer.phone) %}
+<div class="spread">
+  <h1 style="margin-bottom:0">{{ t('my_order') }}</h1>
+  <span class="tag">{{ order.order_no }}</span>
+</div>
+
+<!-- status timeline -->
+<div class="timeline">
+  {% if order.status == 'cancelled' %}
+    <span class="step cancelled">{{ slabel('cancelled') }}</span>
+  {% else %}
+    {% set idx = status_flow.index(order.status) if order.status in status_flow else -1 %}
+    {% for s in status_flow %}
+      <span class="step {{ 'done' if loop.index0 <= idx else '' }}">{{ slabel(s) }}</span>
+    {% endfor %}
+  {% endif %}
+</div>
+
+{% if request.query_params.get('uploaded') %}
+<div class="card" style="border-color:var(--ok)"><span class="ok">{% if lang=='ms' %}Resit diterima. Kami sedang semak.{% else %}Receipt received. We're checking it.{% endif %}</span></div>
+{% endif %}
+
+<!-- payment -->
+{% if order.status not in ['paid','printing','ready','cancelled'] %}
+<div class="card stack">
+  <h2>{{ t('pay_title') }}</h2>
+  <div class="spread"><span class="muted">{{ t('total') }}</span><span class="amount-big">{{ rm(order.total_sen) }}</span></div>
+  {% if order.paid_sen %}<div class="spread"><span class="muted">{{ t('paid_so_far') }}</span><strong>{{ rm(order.paid_sen) }}</strong></div>
+  <div class="spread"><span class="muted">{{ t('balance_due') }}</span><strong class="error">{{ rm(balance_sen) }}</strong></div>{% endif %}
+  {% if overpaid %}<p class="error">{{ t('overpaid_note') }}</p>{% endif %}
+
+  <div class="pay-method">
+    <strong>{{ t('pay_qrpay') }} — {{ settings.pay_qrpay_bank }}</strong>
+    {% set qr = event.pay_qrpay_image or settings.pay_qrpay_image %}
+    {% if qr %}<div style="margin-top:8px"><img src="{{ qr }}" alt="QRPay" style="max-width:220px"></div>
+    {% else %}<p class="note">{% if lang=='ms' %}Imbas QRPay {{ settings.pay_qrpay_bank }} dan masukkan jumlah di atas.{% else %}Scan {{ settings.pay_qrpay_bank }} QRPay and key in the amount above.{% endif %}</p>{% endif %}
+  </div>
+  <div class="pay-method">
+    <strong>{{ t('pay_transfer') }} — {{ settings.pay_bank_name }}</strong>
+    <div class="bank-no">{{ event.pay_bank_no or settings.pay_bank_account_no or '—' }}</div>
+    <div class="note">{{ settings.pay_bank_account_name }}</div>
+  </div>
+
+  <form method="post" action="/order/{{ order.order_no }}/receipt" enctype="multipart/form-data" class="stack">
+    <label for="files">{{ t('upload_receipt') }}</label>
+    <input id="files" name="files" type="file" accept="image/png,image/jpeg,application/pdf" multiple required>
+    <span class="note">{{ t('receipt_hint') }}</span>
+    <button class="btn block" type="submit">{{ t('upload_receipt') }}</button>
+  </form>
+</div>
+{% endif %}
+
+<!-- items -->
+<div class="card">
+  <h2>{% if lang=='ms' %}Pesanan{% else %}Items{% endif %}</h2>
+  {% for it in items %}
+  <div class="line">
+    <div class="thumb" style="background-image:url('/p/{{ it.photo_id }}/thumb.webp')"></div>
+    <div style="flex:1"><div style="font-weight:700">{{ it.filename }}</div>
+      <div class="note">{{ it.size_code }} × {{ it.qty }}{% if it.class_name %} · {{ it.class_name }}{% endif %}</div></div>
+    <div style="font-weight:700">{{ rm(it.qty * it.unit_price_sen) }}</div>
+  </div>
+  {% endfor %}
+  <div class="spread" style="margin-top:12px"><span class="muted">{{ t('subtotal') }}</span><span>{{ rm(order.subtotal_sen) }}</span></div>
+  {% if order.postage_sen %}<div class="spread"><span class="muted">{{ t('postage') }}</span><span>{{ rm(order.postage_sen) }}</span></div>{% endif %}
+  <div class="spread" style="margin-top:4px"><strong>{{ t('total') }}</strong><strong>{{ rm(order.total_sen) }}</strong></div>
+</div>
+
+<!-- delivery -->
+<div class="card">
+  <h2>{{ t('delivery') }}</h2>
+  {% if order.delivery_method == 'post' %}
+    <p>{{ t('post') }}</p><p class="note">{{ order.address }}</p>
+    {% set g = gmaps_link(order.lat, order.lng, order.address) %}
+    {% if g %}<a class="btn ghost sm" href="{{ g }}" target="_blank" rel="noopener">📍 {{ t('open_in_maps') }}</a>{% endif %}
+  {% else %}
+    <p>{{ t('pickup') }}{% if event.pickup_location %} — {{ event.pickup_location }}{% endif %}</p>
+  {% endif %}
+</div>
+
+<!-- receipts history -->
+{% if receipts %}
+<div class="card">
+  <h2>{% if lang=='ms' %}Resit dihantar{% else %}Receipts sent{% endif %}</h2>
+  {% for r in receipts %}
+  <div class="line"><div style="flex:1">
+    <div>{{ r.orig_filename }}</div>
+    <div class="note">{{ rm(r.amount_sen) if r.amount_sen else '—' }} · {{ r.receipt_no or '—' }} · {{ r.created_at }}
+      {% if r.duplicate %}<span class="tag flag">dup</span>{% endif %}
+      {% if r.ocr_status=='failed' %}<span class="tag flag">OCR?</span>{% endif %}
+      {% if r.accepted %}<span class="tag">✓</span>{% endif %}</div>
+  </div></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<a class="btn sand block" href="{{ wa }}" target="_blank" rel="noopener">{{ t('contact_whatsapp') }}</a>
+{% endblock %}
+{% block scripts %}<script>window.__wa="{{ wa }}";</script>{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ t('your_phone') }} — {{ settings.app_name }}{% endblock %}
+{% block content %}
+<h1>{% if lang=='ms' %}Lengkapkan butiran{% else %}Complete your details{% endif %}</h1>
+<div class="card">
+  <form method="post" action="/login/phone">
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="field">
+      <label for="name">{{ t('name_short') }}</label>
+      <input id="name" name="name" autocomplete="name" placeholder="{% if lang=='ms' %}Nama panggilan{% else %}Short name{% endif %}">
+    </div>
+    <div class="field">
+      <label for="phone">{{ t('your_phone') }}</label>
+      <input id="phone" name="phone" type="tel" required autocomplete="tel" placeholder="01X-XXX XXXX">
+    </div>
+    <button class="btn block" type="submit">{{ t('continue') }}</button>
+  </form>
+</div>
+{% endblock %}

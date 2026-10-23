@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ t('terms') }} — {{ settings.app_name }}{% endblock %}
+{% block content %}
+<h1>{{ t('terms') }}</h1>
+<div class="card stack">
+  <p class="muted">{% if lang=='ms' %}[Letak teks terma sebenar anda di sini — ini ruang placeholder.]{% else %}[Put your real terms text here — this is a placeholder.]{% endif %}</p>
+  <ul>
+    <li>{% if lang=='ms' %}Gambar adalah untuk cetakan sahaja; tiada muat turun digital.{% else %}Photos are for printing only; no digital download.{% endif %}</li>
+    <li>{% if lang=='ms' %}Bayaran secara manual (QRPay / pindahan bank) dan disahkan melalui resit.{% else %}Payment is manual (QRPay / bank transfer), verified by receipt.{% endif %}</li>
+    <li>{% if lang=='ms' %}Penghantaran: ambil di sekolah atau pos (caj tambahan).{% else %}Delivery: pickup at school or post (extra charge).{% endif %}</li>
+    <li>{% if lang=='ms' %}Sebarang isu bayaran akan dihubungi melalui WhatsApp.{% else %}Any payment issue will be contacted via WhatsApp.{% endif %}</li>
+  </ul>
+  <p class="note">PROMEDIA CREATIVE SOLUTIONS (JR0113470-V) · {{ t('studio_addr') }}</p>
+</div>
+{% endblock %}

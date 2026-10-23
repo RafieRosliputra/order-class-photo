@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Admin — {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="spread"><h1>Admin</h1>
+  <div class="row">
+    <a class="btn sm" href="/admin/events/new">+ Event</a>
+    <a class="btn ghost sm" href="/admin/orders">Orders</a>
+    <a class="btn ghost sm" href="/admin/audit">Audit</a>
+  </div>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>Event</th><th>Orders</th><th>Paid</th><th>Status</th><th></th></tr>
+    {% for e in events %}
+    {% set s = summary[e.id] %}
+    <tr>
+      <td><strong>{{ e.name }}</strong><br><span class="note">{{ e.slug }} · {{ e.status }}</span></td>
+      <td>{{ s.orders }}</td>
+      <td>{{ rm(s.paid) }}</td>
+      <td>{% for st,c in s.counts.items() %}<span class="tag">{{ st }}:{{ c }}</span> {% endfor %}</td>
+      <td style="white-space:nowrap">
+        <a class="btn ghost sm" href="/admin/events/{{ e.id }}">Manage</a>
+        <a class="btn ghost sm" href="/e/{{ e.slug }}" target="_blank">View</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if not events %}<p class="muted">No events yet. Create one to begin.</p>{% endif %}
+</div>
+
+<form method="post" action="/admin/trash/clear" class="card" style="margin-top:14px">
+  <div class="spread"><span>Receipt trash (originals auto-clear after {{ settings.trash_retention_days }} days)</span>
+  <button class="btn ghost sm" type="submit">Clear trash now</button></div>
+</form>
+{% endblock %}

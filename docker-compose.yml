@@ -1,0 +1,20 @@
+# Johor Studio — Photo Order
+# App only. Nextcloud and Cloudflare Tunnel (cloudflared) are assumed to run
+# separately on the TrueNAS host. Cloudflare Tunnel points shop.johorstudio.com
+# at http://<this-host>:8000 and protects /admin with Cloudflare Access.
+
+services:
+  app:
+    build: .
+    image: johorstudio-photo-order:latest
+    container_name: photo-order
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persistent data lives OUTSIDE the image, on the host.
+      - "/mnt/a/storage/website/print purchase:/mnt/a/storage/website/print purchase"
+      # Google service-account key (read-only), if used for Sheets.
+      - "/mnt/a/storage/website/print purchase/google-service-account.json:/app/google-service-account.json:ro"
+    # The app reaches Nextcloud over the network via NEXTCLOUD_BASE_URL.

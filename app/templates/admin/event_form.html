@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}New event — Admin{% endblock %}
+{% block content %}
+<h1>New event</h1>
+<form method="post" action="/admin/events/new" class="card stack">
+  <div class="field"><label>Name</label><input name="name" required placeholder="Konvokesyen Tadika X 2026"></div>
+  <div class="grid2">
+    <div class="field"><label>Event date</label><input name="event_date" type="date"></div>
+    <div class="field"><label>Order close date</label><input name="close_date" type="date"></div>
+  </div>
+  <div class="field"><label>Nextcloud folder (event root; subfolders = classes)</label>
+    <input name="nextcloud_folder" placeholder="Konvo/2026-TadikaX"></div>
+  <div class="field"><label>Class folder delimiter ("SCHOOL - CLASS")</label>
+    <input name="class_delimiter" value=" - "></div>
+  <div class="field"><label>Pickup location (school)</label><input name="pickup_location"></div>
+  <div class="grid2">
+    <div class="field"><label>Bank Muamalat account no.</label><input name="pay_bank_no"></div>
+    <div class="field"><label>QRPay image URL (optional)</label><input name="pay_qrpay_image" placeholder="/static/img/qrpay.png"></div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>Postage West (RM)</label><input name="postage_west" value="10"></div>
+    <div class="field"><label>Postage Sabah/Sarawak (RM)</label><input name="postage_east" value="18"></div>
+  </div>
+  <button class="btn" type="submit">Create</button>
+</form>
+{% endblock %}

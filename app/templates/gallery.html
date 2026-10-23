@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ event.name }} — {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="spread">
+  <div>
+    <h1 style="margin-bottom:0">{{ event.name }}</h1>
+    <div class="note">{{ event.event_date or '' }}{% if event.pickup_location %} · {{ event.pickup_location }}{% endif %}</div>
+  </div>
+</div>
+
+{% if not is_open %}
+  <div class="card" style="margin-top:12px"><span class="error">{{ t('event_closed') }}</span></div>
+{% endif %}
+
+<p class="note">{{ t('no_save_note') }}</p>
+
+<div class="toolbar">
+  {% if schools %}
+  <select id="f-school"><option value="">{{ t('all_schools') }}</option>
+    {% for s in schools %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  <select id="f-class"><option value="">{{ t('all_classes') }}</option>
+    {% for c in classes %}<option value="{{ c.name }}">{{ c.name }}{% if c.school %} ({{ c.school }}){% endif %}</option>{% endfor %}
+  </select>
+  <input id="f-search" type="search" placeholder="{{ t('search') }}">
+</div>
+
+<div class="grid" id="grid" data-event-id="{{ event.id }}" data-added-label="{{ t('added_toast') }}">
+  {% for p in photos %}
+  <div class="cell" data-id="{{ p.id }}" data-school="{{ p.school }}" data-class="{{ p.class_name }}"
+       data-fname="{{ p.filename }}" data-large="/p/{{ p.id }}/large.webp"
+       style="background-image:url('/p/{{ p.id }}/thumb.webp')">
+    <span class="fname">{{ p.filename }}</span>
+    <span class="tick"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>
+    <span class="zoom" role="button" aria-label="Zoom"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M10 20H4v-6"/><path d="M20 4l-6 6"/><path d="M4 20l6-6"/></svg></span>
+  </div>
+  {% endfor %}
+</div>
+
+{% if not photos %}<p class="muted" style="margin-top:20px">{% if lang=='ms' %}Belum ada gambar.{% else %}No photos yet.{% endif %}</p>{% endif %}
+
+<div class="selbar" id="selbar">
+  <div class="grow"><strong id="selcount">0</strong> {{ t('choose_photos')|lower }} · <a href="#" id="clear-sel" class="muted">{{ t('cancel') }}</a></div>
+  <button class="btn" id="add-btn">{{ t('add_to_cart') }}</button>
+</div>
+
+<div class="lightbox" id="lightbox"><button class="close" aria-label="Close">×</button><div class="img"></div></div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/gallery.js" defer></script>{% endblock %}

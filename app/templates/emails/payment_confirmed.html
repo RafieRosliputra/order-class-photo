@@ -1,0 +1,10 @@
+<!doctype html>
+<html><body style="font-family:Arial,sans-serif;color:#1c1b19;background:#f3f0ec;padding:24px">
+  <div style="max-width:460px;margin:0 auto;background:#fff;border-radius:12px;padding:28px">
+    <div style="font-weight:800;font-size:18px">{{ brand }}</div>
+    <h2 style="margin:12px 0">Bayaran diterima / Payment received</h2>
+    <p>Terima kasih! Bayaran untuk order <strong>{{ order_no }}</strong> telah disahkan (<strong>{{ total }}</strong>). Gambar anda akan dicetak.</p>
+    <p style="color:#6b675f">Thank you! Payment for order <strong>{{ order_no }}</strong> is confirmed (<strong>{{ total }}</strong>). Your prints will be produced.</p>
+    <p><a href="{{ status_url }}" style="display:inline-block;background:#2c2a27;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px">Semak status / Check status</a></p>
+  </div>
+</body></html>

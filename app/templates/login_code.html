@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ t('enter_code') }} — {{ settings.app_name }}{% endblock %}
+{% block content %}
+<h1>{{ t('enter_code') }}</h1>
+<div class="card">
+  {% if dev_code %}<p class="ok">DEV: {{ dev_code }}</p>{% endif %}
+  <p class="note">{% if lang=='ms' %}Dihantar ke{% else %}Sent to{% endif %} <strong>{{ email }}</strong></p>
+  <form method="post" action="/login/verify">
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="field">
+      <label for="code">{{ t('code_hint') }}</label>
+      <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required
+             placeholder="21 88" style="font-size:22px;letter-spacing:.1em;text-align:center">
+    </div>
+    {% if error == 'wrong' %}<p class="error">{{ t('err_wrong_code') }}</p>{% endif %}
+    {% if error == 'expired' %}<p class="error">{{ t('err_expired') }}</p>{% endif %}
+    {% if error == 'locked' %}<p class="error">{{ t('err_locked') }}</p>{% endif %}
+    {% if error == 'no_code' %}<p class="error">{{ t('err_expired') }}</p>{% endif %}
+    <button class="btn block" type="submit">{{ t('verify') }}</button>
+  </form>
+  <form method="post" action="/login/request" style="margin-top:10px">
+    <input type="hidden" name="email" value="{{ email }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="btn ghost block" type="submit">{{ t('resend') }}</button>
+  </form>
+</div>
+{% endblock %}

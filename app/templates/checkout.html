@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{{ t('checkout') }} — {{ settings.app_name }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+{% endblock %}
+{% block content %}
+<h1>{{ t('checkout') }}</h1>
+<form method="post" action="/checkout" class="stack">
+  <div class="card stack">
+    <h2>{{ t('delivery') }}</h2>
+    <label class="row" style="gap:10px">
+      <input type="radio" name="delivery" value="pickup" checked style="width:auto" onchange="togglePost(false)">
+      <span>{{ t('pickup') }}{% if event.pickup_location %} — {{ event.pickup_location }}{% endif %} <span class="muted">(RM0.00)</span></span>
+    </label>
+    <label class="row" style="gap:10px">
+      <input type="radio" name="delivery" value="post" style="width:auto" onchange="togglePost(true)">
+      <span>{{ t('post') }}</span>
+    </label>
+
+    <div id="postbox" class="hidden stack">
+      <div>
+        <label>{{ t('postage') }}</label>
+        <label class="row" style="gap:8px"><input type="radio" name="zone" value="west" checked style="width:auto"> {% if lang=='ms' %}Semenanjung{% else %}Peninsular{% endif %} — {{ rm(event.postage_west_sen) }}</label>
+        <label class="row" style="gap:8px"><input type="radio" name="zone" value="east" style="width:auto"> Sabah / Sarawak — {{ rm(event.postage_east_sen) }}</label>
+      </div>
+      <div class="field">
+        <label for="address">{{ t('address') }}</label>
+        <textarea id="address" name="address" rows="3" placeholder="{% if lang=='ms' %}Alamat penuh untuk pos{% else %}Full postal address{% endif %}"></textarea>
+      </div>
+      <div>
+        <label>{{ t('pin_location') }}</label>
+        <div id="map"></div>
+        <input type="hidden" name="lat" id="lat"><input type="hidden" name="lng" id="lng">
+      </div>
+      {% if error == 'address_required' %}<p class="error">{% if lang=='ms' %}Sila isi alamat.{% else %}Address is required.{% endif %}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card stack">
+    <h2>{% if lang=='ms' %}Butiran anda{% else %}Your details{% endif %}</h2>
+    <div class="field"><label for="name">{{ t('name_short') }}</label>
+      <input id="name" name="name" value="{{ customer.name }}" autocomplete="name"></div>
+    <div class="field"><label for="phone">{{ t('your_phone') }}</label>
+      <input id="phone" name="phone" type="tel" value="{{ customer.phone }}" autocomplete="tel">
+      <span class="note">{% if lang=='ms' %}Jika anda ubah nombor, ia dikemas kini sebagai nombor utama.{% else %}Changing this updates your default number.{% endif %}</span></div>
+    {% if schools and schools|length > 1 %}
+    <div class="field"><label for="category">{% if lang=='ms' %}Sekolah{% else %}School{% endif %}</label>
+      <select id="category" name="category"><option value="">—</option>
+        {% for s in schools %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></div>
+    {% endif %}
+    <div class="field"><label>{{ t('email') }}</label><input value="{{ customer.email }}" disabled></div>
+  </div>
+
+  <div class="card">
+    <div class="spread"><span class="muted">{{ t('subtotal') }}</span><strong>{{ rm(subtotal_sen) }}</strong></div>
+    <div class="spread" style="margin-top:6px"><span class="muted">{{ t('postage') }}</span><span id="post-label">RM0.00</span></div>
+    <button class="btn block" type="submit" style="margin-top:12px">{{ t('continue') }} →</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+var WEST={{ event.postage_west_sen }}, EAST={{ event.postage_east_sen }}, map=null;
+function fmt(s){return 'RM'+(s/100).toFixed(2);}
+function updatePost(){
+  var post=document.querySelector('input[name=delivery]:checked').value==='post';
+  var zone=(document.querySelector('input[name=zone]:checked')||{}).value;
+  document.getElementById('post-label').textContent = post ? fmt(zone==='east'?EAST:WEST) : 'RM0.00';
+}
+function togglePost(on){
+  document.getElementById('postbox').classList.toggle('hidden',!on);
+  updatePost();
+  if(on && !map){ initMap(); }
+}
+document.querySelectorAll('input[name=zone]').forEach(function(r){r.addEventListener('change',updatePost);});
+function initMap(){
+  map=L.map('map').setView([1.6600,103.6000],11); // Johor default
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
+  var marker=null;
+  map.on('click',function(e){
+    if(marker)marker.setLatLng(e.latlng); else marker=L.marker(e.latlng,{draggable:true}).addTo(map);
+    document.getElementById('lat').value=e.latlng.lat.toFixed(6);
+    document.getElementById('lng').value=e.latlng.lng.toFixed(6);
+    marker.on('dragend',function(ev){var p=ev.target.getLatLng();
+      document.getElementById('lat').value=p.lat.toFixed(6);document.getElementById('lng').value=p.lng.toFixed(6);});
+  });
+  setTimeout(function(){map.invalidateSize();},200);
+}
+</script>
+{% endblock %}

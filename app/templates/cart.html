@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ t('cart') }} — {{ settings.app_name }}{% endblock %}
+{% block content %}
+<h1>{{ t('cart') }}</h1>
+
+{% if not items %}
+  <div class="card"><p class="muted">{{ t('cart_empty') }}</p>
+  <a class="btn ghost" href="/">{{ t('choose_photos') }}</a></div>
+{% else %}
+<div class="card">
+  {% for it in items %}
+  <div class="line">
+    <div class="thumb" style="background-image:url('/p/{{ it.photo.id }}/thumb.webp')"></div>
+    <div style="flex:1">
+      <div style="font-weight:700">{{ it.photo.filename }}</div>
+      <div class="pills" style="margin:8px 0">
+        {% for s in sizes %}
+        <form method="post" action="/cart/change-size" style="display:inline">
+          <input type="hidden" name="key" value="{{ it.key }}">
+          <input type="hidden" name="size_id" value="{{ s.id }}">
+          <button class="pill {{ 'on' if s.id==it.size.id else '' }}" type="submit" title="{{ rm(s.price_sen) }}">{{ s.code }}</button>
+        </form>
+        {% endfor %}
+      </div>
+      <div class="spread">
+        <form method="post" action="/cart/update" class="qty">
+          <input type="hidden" name="key" value="{{ it.key }}">
+          <button type="submit" name="qty" value="{{ it.qty-1 }}" aria-label="-">−</button>
+          <span>{{ it.qty }}</span>
+          <button type="submit" name="qty" value="{{ it.qty+1 }}" aria-label="+">+</button>
+        </form>
+        <div style="font-weight:700">{{ rm(it.line_sen) }}</div>
+      </div>
+      <div class="note">{{ it.size.code }} · {{ rm(it.size.price_sen) }} / {% if lang=='ms' %}keping{% else %}print{% endif %}</div>
+    </div>
+    <form method="post" action="/cart/update">
+      <input type="hidden" name="key" value="{{ it.key }}">
+      <button class="btn ghost sm" type="submit" name="qty" value="0">{{ t('remove') }}</button>
+    </form>
+  </div>
+  {% endfor %}
+
+  <a class="btn ghost block" href="/e/{{ event.slug }}" style="margin-top:12px">+ {{ t('add_more') }}</a>
+</div>
+
+<div class="card" style="margin-top:14px">
+  <div class="spread"><span class="muted">{{ t('subtotal') }}</span><strong>{{ rm(subtotal_sen) }}</strong></div>
+  <div class="note" style="margin:6px 0">{% if lang=='ms' %}Caj pos (jika pos) dikira semasa pembayaran.{% else %}Postage (if posted) is added at checkout.{% endif %}</div>
+  <a class="btn block" href="/checkout">{{ t('checkout') }}</a>
+</div>
+{% endif %}
+{% endblock %}

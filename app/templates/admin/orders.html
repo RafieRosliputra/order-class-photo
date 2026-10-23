@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Orders — Admin{% endblock %}
+{% block content %}
+<div class="spread"><h1>Orders</h1><a class="btn ghost sm" href="/admin">← Dashboard</a></div>
+
+<form class="toolbar" method="get" action="/admin/orders">
+  <select name="event"><option value="">All events</option>
+    {% for e in events %}<option value="{{ e.id }}" {{ 'selected' if f_event==e.id|string }}>{{ e.name }}</option>{% endfor %}</select>
+  <select name="status"><option value="">All status</option>
+    {% for s in ['awaiting_payment','reviewing','paid','printing','ready','cancelled'] %}
+    <option value="{{ s }}" {{ 'selected' if f_status==s }}>{{ s }}</option>{% endfor %}</select>
+  <label class="row" style="gap:6px"><input type="checkbox" name="flagged" value="1" style="width:auto" {{ 'checked' if f_flagged }}> flagged</label>
+  <button class="btn sm" type="submit">Filter</button>
+</form>
+
+<div class="card" style="margin-top:12px">
+<table>
+  <tr><th>Order</th><th>Customer</th><th>Event</th><th>Total</th><th>Paid</th><th>Status</th></tr>
+  {% for o in orders %}
+  <tr>
+    <td><a href="/admin/orders/{{ o.id }}"><strong>{{ o.order_no }}</strong></a><br><span class="note">{{ o.created_at }}</span></td>
+    <td>{{ o.cust_name or '—' }}<br><span class="note">{{ o.email }} · {{ o.phone_used }}</span></td>
+    <td>{{ o.event_name }}</td>
+    <td>{{ rm(o.total_sen) }}</td>
+    <td>{{ rm(o.paid_sen) }}</td>
+    <td><span class="tag">{{ o.status }}</span></td>
+  </tr>
+  {% endfor %}
+</table>
+{% if not orders %}<p class="muted">No orders.</p>{% endif %}
+</div>
+{% endblock %}

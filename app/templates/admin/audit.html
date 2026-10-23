@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Audit — Admin{% endblock %}
+{% block content %}
+<div class="spread"><h1>Audit log</h1><a class="btn ghost sm" href="/admin">← Dashboard</a></div>
+<div class="card">
+<table><tr><th>When</th><th>Actor</th><th>Action</th><th>Entity</th><th>Detail</th></tr>
+{% for r in rows %}
+<tr><td class="note">{{ r.ts }}</td><td>{{ r.actor }}</td><td><span class="tag">{{ r.action }}</span></td>
+  <td>{{ r.entity }} {{ r.entity_id }}</td><td class="note">{{ r.detail }}</td></tr>
+{% endfor %}
+</table>
+</div>
+{% endblock %}

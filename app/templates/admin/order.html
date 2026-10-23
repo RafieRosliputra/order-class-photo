@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ order.order_no }} — Admin{% endblock %}
+{% block content %}
+<div class="spread"><h1>{{ order.order_no }}</h1><a class="btn ghost sm" href="/admin/orders">← Orders</a></div>
+
+<div class="grid2">
+  <div class="card stack">
+    <h2>Order</h2>
+    <p>{{ event.name }} · <span class="tag">{{ order.status }}</span></p>
+    <p>{{ customer.name }} · {{ customer.email }} · {{ order.phone_used or customer.phone }}</p>
+    {% if order.delivery_method=='post' %}<p>Post: {{ order.address }}
+      {% set g = gmaps_link(order.lat, order.lng, order.address) %}{% if g %}· <a href="{{ g }}" target="_blank">map</a>{% endif %}</p>
+    {% else %}<p>Pickup{% if event.pickup_location %}: {{ event.pickup_location }}{% endif %}</p>{% endif %}
+    <table>
+      {% for it in items %}
+      <tr><td>{{ it.filename }}<br><span class="note">{{ it.school }} {{ it.class_name }}</span></td>
+        <td>
+          <form method="post" action="/admin/items/{{ it.id }}/update" class="row" style="gap:6px">
+            <select name="size_id">{% for s in sizes %}<option value="{{ s.id }}" {{ 'selected' if s.id==it.size_id }}>{{ s.code }}</option>{% endfor %}</select>
+            <input name="qty" type="number" value="{{ it.qty }}" min="1" style="width:64px">
+            <button class="btn ghost sm">↻</button>
+          </form>
+        </td>
+        <td>{{ rm(it.qty*it.unit_price_sen) }}</td></tr>
+      {% endfor %}
+    </table>
+    <div class="spread"><strong>Total</strong><strong>{{ rm(order.total_sen) }}</strong></div>
+    <div class="spread"><span class="muted">Paid</span><span>{{ rm(order.paid_sen) }}</span></div>
+  </div>
+
+  <div class="stack">
+    <div class="card stack">
+      <h2>Actions</h2>
+      <form method="post" action="/admin/orders/{{ order.id }}/mark-paid"><button class="btn block">Mark PAID (→ copy prints + sheet + email)</button></form>
+      <form method="post" action="/admin/orders/{{ order.id }}/override-amount" class="row" style="gap:6px">
+        <input name="amount" placeholder="RM paid" style="flex:1"><button class="btn ghost">Override paid</button></form>
+      <form method="post" action="/admin/orders/{{ order.id }}/status" class="row" style="gap:6px">
+        <select name="status">{% for s in ['awaiting_payment','reviewing','paid','printing','ready'] %}<option value="{{ s }}" {{ 'selected' if order.status==s }}>{{ s }}</option>{% endfor %}</select>
+        <button class="btn ghost">Set status</button></form>
+      <form method="post" action="/admin/orders/{{ order.id }}/reprint"><button class="btn ghost block">Re-copy prints + append sheet</button></form>
+      <form method="post" action="/admin/orders/{{ order.id }}/cancel" class="row" style="gap:6px">
+        <input name="reason" placeholder="Cancel reason" style="flex:1"><button class="btn ghost">Cancel</button></form>
+    </div>
+
+    <div class="card stack">
+      <h2>Receipts</h2>
+      {% for r in receipts %}
+      <div class="line" style="align-items:flex-start">
+        <a href="/admin/receipt/{{ r.id }}" target="_blank" style="flex:none">
+          <img class="receipt-img" style="width:120px" src="/admin/receipt/{{ r.id }}" alt="receipt"></a>
+        <div style="flex:1">
+          <div><strong>{{ rm(r.amount_sen) if r.amount_sen else '— (OCR?)' }}</strong>
+            {% if r.accepted %}<span class="tag">accepted</span>{% endif %}
+            {% if r.duplicate %}<span class="tag flag">duplicate</span>{% endif %}
+            {% if r.forced %}<span class="tag flag">forced</span>{% endif %}
+            {% if r.ocr_status=='failed' %}<span class="tag flag">OCR failed</span>{% endif %}</div>
+          <div class="note">Ref: {{ r.receipt_no or '—' }} · {{ r.bank or '—' }} · {{ r.receipt_date }} {{ r.receipt_time }}</div>
+          <div class="note">{{ r.orig_filename }} · {{ r.created_at }}</div>
+        </div>
+      </div>
+      {% endfor %}
+      {% if not receipts %}<p class="muted">No receipts uploaded.</p>{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

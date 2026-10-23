@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav_login') }} — {{ settings.app_name }}{% endblock %}
+{% block content %}
+<h1>{{ t('login_title') }}</h1>
+<div class="card">
+  <form method="post" action="/login/request">
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="field">
+      <label for="email">{{ t('email') }}</label>
+      <input id="email" name="email" type="email" required autocomplete="email" placeholder="nama@contoh.com">
+    </div>
+    {% if error == 'invalid_email' %}<p class="error">{% if lang=='ms' %}E-mel tidak sah.{% else %}Invalid email.{% endif %}</p>{% endif %}
+    {% if error == 'too_soon' %}<p class="error">{{ t('err_too_soon') }} ({{ wait }}s)</p>{% endif %}
+    {% if error == 'locked' %}<p class="error">{{ t('err_locked') }}</p>{% endif %}
+    <button class="btn block" type="submit">{{ t('send_code') }}</button>
+  </form>
+  <p class="note" style="margin-top:12px">{% if lang=='ms' %}Kami hantar kod ringkas ke e-mel anda untuk pengesahan.{% else %}We'll email you a short code to verify.{% endif %}</p>
+</div>
+{% endblock %}
