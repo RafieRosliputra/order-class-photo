@@ -83,7 +83,10 @@ def _serve_cached(rel_path: str, photo, kind: str) -> Response:
     if not full or not full.exists():
         # lazy generation fallback
         try:
-            data = nextcloud.download(photo["rel_path"])
+            with db() as conn:
+                ev = one(conn, "SELECT nextcloud_id FROM events WHERE id=?", (photo["event_id"],))
+            inst = settings.nc_instance(ev["nextcloud_id"] if ev else None)
+            data = nextcloud.download(inst, photo["rel_path"])
             made = imaging.make_previews(data)
             with db() as conn:
                 conn.execute(

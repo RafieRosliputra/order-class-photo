@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     nextcloud_app_password: str = ""
     nextcloud_webdav_root: str = "/remote.php/dav/files/galeri-bot"
     nextcloud_print_folder: str = "Untuk-Cetak"
+    # Multiple Nextcloud instances: JSON list of
+    #   {"id","label","base_url","user","password","webdav_root"}
+    nextcloud_instances: str = ""
+    nextcloud_print_instance: str = ""     # instance id that receives print output
 
     # Payment
     pay_qrpay_bank: str = "Maybank"
@@ -121,6 +125,37 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.app_env.lower() in ("dev", "development", "local")
+
+    # --- Nextcloud instances ---
+    def nc_instances(self) -> list[dict]:
+        import json
+        raw = self.nextcloud_instances.strip()
+        if raw:
+            try:
+                data = json.loads(raw)
+                if isinstance(data, list) and data:
+                    return data
+            except (ValueError, TypeError):
+                pass
+        if self.nextcloud_base_url:  # legacy single-instance fallback
+            return [{
+                "id": "default", "label": self.nextcloud_base_url,
+                "base_url": self.nextcloud_base_url, "user": self.nextcloud_user,
+                "password": self.nextcloud_app_password,
+                "webdav_root": self.nextcloud_webdav_root,
+            }]
+        return []
+
+    def nc_instance(self, iid: str | None) -> dict | None:
+        insts = self.nc_instances()
+        if iid:
+            for i in insts:
+                if i.get("id") == iid:
+                    return i
+        return insts[0] if insts else None
+
+    def nc_print_instance(self) -> dict | None:
+        return self.nc_instance(self.nextcloud_print_instance or None)
 
 
 @lru_cache

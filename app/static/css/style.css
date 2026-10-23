@@ -140,3 +140,8 @@ th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);verti
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:700px){.grid2{grid-template-columns:1fr}}
 .receipt-img{width:100%;border:1px solid var(--line);border-radius:10px}
+
+/* nextcloud folder browser */
+.nc-item{display:block;padding:8px 10px;border-radius:8px;text-decoration:none;color:var(--ink)}
+.nc-item:hover{background:var(--sand-50)}
+#nc-list{max-height:240px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:4px;margin-top:8px}

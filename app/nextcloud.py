@@ -1,13 +1,16 @@
 """Minimal Nextcloud WebDAV client (list / download / upload / mkdir).
 
-Originals are read-only; print output is written under NEXTCLOUD_PRINT_FOLDER.
-Photo originals are never cached to local disk — only WebP previews are.
+Supports MULTIPLE Nextcloud instances: every function takes an `inst` dict
+({id,label,base_url,user,password,webdav_root}) from settings.nc_instances().
+Originals are read from the event's instance; print output is written to the
+configured print instance. Photo originals are never cached locally — only
+WebP previews are.
 """
 from __future__ import annotations
 
 import posixpath
 from dataclasses import dataclass
-from urllib.parse import unquote, urljoin, quote
+from urllib.parse import unquote, quote
 from xml.etree import ElementTree as ET
 
 import httpx
@@ -27,27 +30,28 @@ class DavEntry:
     etag: str
 
 
-def _client() -> httpx.Client:
+def _client(inst: dict) -> httpx.Client:
     return httpx.Client(
-        base_url=settings.nextcloud_base_url,
-        auth=(settings.nextcloud_user, settings.nextcloud_app_password),
+        base_url=inst["base_url"],
+        auth=(inst.get("user", ""), inst.get("password", "")),
         timeout=60,
         follow_redirects=True,
     )
 
 
-def _full(path: str) -> str:
-    """Join WebDAV root + path, URL-encoding each segment."""
-    root = settings.nextcloud_webdav_root.strip("/")
+def _root(inst: dict) -> str:
+    return (inst.get("webdav_root") or "/remote.php/dav/files/").strip("/")
+
+
+def _full(inst: dict, path: str) -> str:
     rel = path.strip("/")
-    segments = [quote(s) for s in (f"{root}/{rel}" if rel else root).split("/")]
-    return "/" + "/".join(segments)
+    joined = f"{_root(inst)}/{rel}" if rel else _root(inst)
+    return "/" + "/".join(quote(s) for s in joined.split("/"))
 
 
-def _rel_from_href(href: str) -> str:
-    """Strip the WebDAV root prefix from an href to get a root-relative path."""
+def _rel_from_href(inst: dict, href: str) -> str:
     href = unquote(href)
-    root = "/" + settings.nextcloud_webdav_root.strip("/") + "/"
+    root = "/" + _root(inst) + "/"
     idx = href.find(root)
     if idx != -1:
         return href[idx + len(root):].strip("/")
@@ -62,73 +66,68 @@ PROPFIND_BODY = (
 )
 
 
-def list_dir(path: str = "") -> list[DavEntry]:
-    """List immediate children of a folder (depth 1)."""
-    url = _full(path)
-    with _client() as c:
-        r = c.request("PROPFIND", url, headers={"Depth": "1"}, content=PROPFIND_BODY)
+def list_dir(inst: dict, path: str = "") -> list[DavEntry]:
+    with _client(inst) as c:
+        r = c.request("PROPFIND", _full(inst, path), headers={"Depth": "1"}, content=PROPFIND_BODY)
         r.raise_for_status()
     entries: list[DavEntry] = []
     tree = ET.fromstring(r.content)
     self_rel = path.strip("/")
     for resp in tree.findall(f"{_DAV}response"):
         href = resp.findtext(f"{_DAV}href") or ""
-        rel = _rel_from_href(href)
+        rel = _rel_from_href(inst, href)
         if rel == self_rel:
-            continue  # skip the folder itself
-        propstat = resp.find(f"{_DAV}propstat/{_DAV}prop")
-        if propstat is None:
             continue
-        is_dir = propstat.find(f"{_DAV}resourcetype/{_DAV}collection") is not None
-        size = int(propstat.findtext(f"{_DAV}getcontentlength") or 0)
-        etag = (propstat.findtext(f"{_DAV}getetag") or "").strip('"')
+        prop = resp.find(f"{_DAV}propstat/{_DAV}prop")
+        if prop is None:
+            continue
+        is_dir = prop.find(f"{_DAV}resourcetype/{_DAV}collection") is not None
+        size = int(prop.findtext(f"{_DAV}getcontentlength") or 0)
+        etag = (prop.findtext(f"{_DAV}getetag") or "").strip('"')
         name = posixpath.basename(rel.rstrip("/"))
         entries.append(DavEntry(name=name, path=rel, is_dir=is_dir, size=size, etag=etag))
     entries.sort(key=lambda e: (not e.is_dir, e.name.lower()))
     return entries
 
 
-def walk_images(folder: str) -> list[DavEntry]:
-    """Immediate image files inside a folder."""
-    return [
-        e for e in list_dir(folder)
-        if not e.is_dir and posixpath.splitext(e.name)[1].lower() in IMAGE_EXT
-    ]
+def walk_images(inst: dict, folder: str) -> list[DavEntry]:
+    return [e for e in list_dir(inst, folder)
+            if not e.is_dir and posixpath.splitext(e.name)[1].lower() in IMAGE_EXT]
 
 
-def subfolders(folder: str) -> list[DavEntry]:
-    return [e for e in list_dir(folder) if e.is_dir]
+def subfolders(inst: dict, folder: str = "") -> list[DavEntry]:
+    return [e for e in list_dir(inst, folder) if e.is_dir]
 
 
-def download(path: str) -> bytes:
-    with _client() as c:
-        r = c.get(_full(path))
+def download(inst: dict, path: str) -> bytes:
+    with _client(inst) as c:
+        r = c.get(_full(inst, path))
         r.raise_for_status()
         return r.content
 
 
-def _mkdir(path: str) -> None:
-    with _client() as c:
-        r = c.request("MKCOL", _full(path))
-        if r.status_code not in (201, 405):  # 405 = already exists
+def _mkdir(inst: dict, path: str) -> None:
+    with _client(inst) as c:
+        r = c.request("MKCOL", _full(inst, path))
+        if r.status_code not in (201, 405):
             r.raise_for_status()
 
 
-def ensure_dirs(path: str) -> None:
-    """Create a folder and all missing parents, relative to the WebDAV root."""
-    parts = path.strip("/").split("/")
+def ensure_dirs(inst: dict, path: str) -> None:
     cur = ""
-    for p in parts:
+    for p in path.strip("/").split("/"):
         cur = f"{cur}/{p}".strip("/")
-        _mkdir(cur)
+        _mkdir(inst, cur)
 
 
-def upload(path: str, data: bytes, content_type: str = "application/octet-stream") -> None:
-    ensure_dirs(posixpath.dirname(path))
-    with _client() as c:
-        r = c.put(_full(path), content=data, headers={"Content-Type": content_type})
+def upload(inst: dict, path: str, data: bytes, content_type: str = "application/octet-stream") -> None:
+    parent = posixpath.dirname(path)
+    if parent:
+        ensure_dirs(inst, parent)
+    with _client(inst) as c:
+        r = c.put(_full(inst, path), content=data, headers={"Content-Type": content_type})
         r.raise_for_status()
 
 
 def is_configured() -> bool:
-    return bool(settings.nextcloud_base_url and settings.nextcloud_app_password)
+    return bool(settings.nc_instances())

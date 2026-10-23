@@ -8,8 +8,23 @@
     <div class="field"><label>Event date</label><input name="event_date" type="date"></div>
     <div class="field"><label>Order close date</label><input name="close_date" type="date"></div>
   </div>
-  <div class="field"><label>Nextcloud folder (event root; subfolders = classes)</label>
-    <input name="nextcloud_folder" placeholder="Konvo/2026-TadikaX"></div>
+  <div class="field"><label>Nextcloud</label>
+    <select name="nextcloud_id" id="nc-instance">
+      {% for i in instances %}<option value="{{ i.id }}">{{ i.label }}</option>{% endfor %}
+    </select>
+    {% if not instances %}<span class="note">Tiada Nextcloud dikonfigur (set NEXTCLOUD_INSTANCES).</span>{% endif %}
+  </div>
+  <div class="field"><label>Folder event (subfolder = kelas)</label>
+    <div class="row" style="gap:8px">
+      <input name="nextcloud_folder" id="nc-folder" placeholder="Pilih folder…">
+      <button type="button" class="btn ghost sm" id="nc-browse-btn">Browse</button>
+    </div>
+    <div id="nc-panel" class="card hidden" style="margin-top:8px">
+      <div class="spread"><span class="note" id="nc-cur">/</span>
+        <button type="button" class="btn sm" id="nc-pick">Pilih folder ini</button></div>
+      <div id="nc-list"></div>
+    </div>
+  </div>
   <div class="field"><label>Class folder delimiter ("SCHOOL - CLASS")</label>
     <input name="class_delimiter" value=" - "></div>
   <div class="field"><label>Pickup location (school)</label><input name="pickup_location"></div>
@@ -24,3 +39,4 @@
   <button class="btn" type="submit">Create</button>
 </form>
 {% endblock %}
+{% block scripts %}<script src="/static/js/ncbrowse.js" defer></script>{% endblock %}

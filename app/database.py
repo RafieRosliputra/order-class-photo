@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS events (
     name            TEXT NOT NULL,
     event_date      TEXT,
     nextcloud_folder TEXT NOT NULL DEFAULT '',
+    nextcloud_id    TEXT NOT NULL DEFAULT '',       -- which Nextcloud instance
     class_delimiter TEXT NOT NULL DEFAULT ' - ',   -- "SEKOLAH - KELAS"
     close_date      TEXT,                           -- ISO date; past = closed
     status          TEXT NOT NULL DEFAULT 'open',   -- open | closed
@@ -199,6 +200,14 @@ def init_db() -> None:
     conn = _connect()
     try:
         conn.executescript(SCHEMA)
+        # lightweight migrations for existing databases
+        for stmt in (
+            "ALTER TABLE events ADD COLUMN nextcloud_id TEXT NOT NULL DEFAULT ''",
+        ):
+            try:
+                conn.execute(stmt)
+            except sqlite3.OperationalError:
+                pass  # column already exists
         conn.commit()
     finally:
         conn.close()

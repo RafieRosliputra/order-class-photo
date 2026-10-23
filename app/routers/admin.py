@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import imaging, nextcloud, sheets, backup, printing
 from ..config import settings
@@ -42,28 +42,47 @@ def dashboard(request: Request):
 # --- event create / edit ---------------------------------------------------
 @router.get("/events/new")
 def event_new(request: Request):
-    return render(request, "admin/event_form.html", {"event": None})
+    return render(request, "admin/event_form.html",
+                  {"event": None, "instances": settings.nc_instances()})
 
 
 @router.post("/events/new")
 def event_create(request: Request, name: str = Form(...), event_date: str = Form(""),
-                 nextcloud_folder: str = Form(""), class_delimiter: str = Form(" - "),
+                 nextcloud_id: str = Form(""), nextcloud_folder: str = Form(""),
+                 class_delimiter: str = Form(" - "),
                  close_date: str = Form(""), pickup_location: str = Form(""),
                  pay_bank_no: str = Form(""), pay_qrpay_image: str = Form(""),
                  postage_west: str = Form("10"), postage_east: str = Form("18")):
     with db() as conn:
         slug = unique_slug(conn, name)
         eid = conn.execute(
-            """INSERT INTO events(slug, name, event_date, nextcloud_folder, class_delimiter,
-                   close_date, pickup_location, pay_bank_no, pay_qrpay_image,
+            """INSERT INTO events(slug, name, event_date, nextcloud_id, nextcloud_folder,
+                   class_delimiter, close_date, pickup_location, pay_bank_no, pay_qrpay_image,
                    postage_west_sen, postage_east_sen)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-            (slug, name, event_date, nextcloud_folder.strip("/"), class_delimiter or " - ",
-             close_date, pickup_location, pay_bank_no, pay_qrpay_image,
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (slug, name, event_date, nextcloud_id, nextcloud_folder.strip("/"),
+             class_delimiter or " - ", close_date, pickup_location, pay_bank_no, pay_qrpay_image,
              to_sen(postage_west or 0), to_sen(postage_east or 0)),
         ).lastrowid
         audit(conn, admin_email(request), "event_created", "event", eid, name)
     return RedirectResponse(f"/admin/events/{eid}", status_code=303)
+
+
+@router.get("/nc/browse")
+def nc_browse(request: Request):
+    """List subfolders of a Nextcloud instance (for the event folder picker)."""
+    iid = request.query_params.get("instance", "")
+    path = request.query_params.get("path", "")
+    inst = settings.nc_instance(iid or None)
+    if not inst:
+        return JSONResponse({"error": "no_instance", "folders": []})
+    try:
+        folders = [{"name": e.name, "path": e.path} for e in nextcloud.subfolders(inst, path)]
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}", "folders": []})
+    parent = path.rsplit("/", 1)[0] if "/" in path else ""
+    return JSONResponse({"path": path, "parent": parent, "has_parent": bool(path),
+                         "folders": folders})
 
 
 @router.get("/events/{event_id}")
@@ -78,24 +97,25 @@ def event_admin(event_id: int, request: Request):
         session = one(conn, "SELECT * FROM print_sessions WHERE event_id=? AND active=1", (event_id,))
     return render(request, "admin/event.html", {
         "event": event, "sizes": sizes, "classes": classes, "nphotos": nphotos,
-        "session": session, "rm": rm,
+        "session": session, "rm": rm, "instances": settings.nc_instances(),
     })
 
 
 @router.post("/events/{event_id}/edit")
 def event_edit(event_id: int, request: Request, name: str = Form(...), event_date: str = Form(""),
-               nextcloud_folder: str = Form(""), class_delimiter: str = Form(" - "),
+               nextcloud_id: str = Form(""), nextcloud_folder: str = Form(""),
+               class_delimiter: str = Form(" - "),
                close_date: str = Form(""), status: str = Form("open"),
                pickup_location: str = Form(""), pay_bank_no: str = Form(""),
                pay_qrpay_image: str = Form(""), postage_west: str = Form("10"),
                postage_east: str = Form("18")):
     with db() as conn:
         conn.execute(
-            """UPDATE events SET name=?, event_date=?, nextcloud_folder=?, class_delimiter=?,
-                   close_date=?, status=?, pickup_location=?, pay_bank_no=?, pay_qrpay_image=?,
-                   postage_west_sen=?, postage_east_sen=? WHERE id=?""",
-            (name, event_date, nextcloud_folder.strip("/"), class_delimiter or " - ", close_date,
-             status, pickup_location, pay_bank_no, pay_qrpay_image,
+            """UPDATE events SET name=?, event_date=?, nextcloud_id=?, nextcloud_folder=?,
+                   class_delimiter=?, close_date=?, status=?, pickup_location=?, pay_bank_no=?,
+                   pay_qrpay_image=?, postage_west_sen=?, postage_east_sen=? WHERE id=?""",
+            (name, event_date, nextcloud_id, nextcloud_folder.strip("/"), class_delimiter or " - ",
+             close_date, status, pickup_location, pay_bank_no, pay_qrpay_image,
              to_sen(postage_west or 0), to_sen(postage_east or 0), event_id),
         )
         audit(conn, admin_email(request), "event_edited", "event", event_id, name)
@@ -125,13 +145,16 @@ def import_event(event_id: int, actor: str) -> None:
     """Scan event folder (event > class > photos), build classes/photos/previews."""
     with db() as conn:
         event = one(conn, "SELECT * FROM events WHERE id=?", (event_id,))
-    if not event or not nextcloud.is_configured():
+    if not event:
+        return
+    inst = settings.nc_instance(event["nextcloud_id"])
+    if not inst:
         return
     base = event["nextcloud_folder"].strip("/")
     delim = event["class_delimiter"] or " - "
     added_photos = 0
     try:
-        class_folders = nextcloud.subfolders(base)
+        class_folders = nextcloud.subfolders(inst, base)
         for ci, cf in enumerate(class_folders):
             school, cls_name = split_school_class(cf.name, delim)
             with db() as conn:
@@ -143,7 +166,7 @@ def import_event(event_id: int, actor: str) -> None:
                     class_id = conn.execute(
                         "INSERT INTO classes(event_id, school, name, folder_path, sort) VALUES (?,?,?,?,?)",
                         (event_id, school, cls_name, cf.path, ci)).lastrowid
-            images = nextcloud.walk_images(cf.path)
+            images = nextcloud.walk_images(inst, cf.path)
             for pi, img in enumerate(images):
                 with db() as conn:
                     seen = one(conn, "SELECT id, etag FROM photos WHERE event_id=? AND rel_path=?",
@@ -151,7 +174,7 @@ def import_event(event_id: int, actor: str) -> None:
                     if seen and seen["etag"] == img.etag:
                         continue
                 try:
-                    data = nextcloud.download(img.path)
+                    data = nextcloud.download(inst, img.path)
                     made = imaging.make_previews(data)
                 except Exception:  # noqa: BLE001
                     log.exception("preview failed for %s", img.path)

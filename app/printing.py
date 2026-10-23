@@ -1,11 +1,9 @@
 """Copy paid-order originals to the Nextcloud print folder.
 
-Layout (matches the studio's batch-print workflow):
+Originals are streamed from the EVENT's Nextcloud instance; the print copies are
+written to the configured PRINT instance (settings.nc_print_instance), under:
 
     <PRINT_FOLDER>/<event-slug>/<SIZE>/<N>salinan/<original filename>
-
-Originals are streamed from Nextcloud at full quality and re-uploaded under the
-print folder; local disk never stores the originals.
 """
 from __future__ import annotations
 
@@ -22,21 +20,20 @@ CONTENT_TYPES = {
 
 
 def copy_order_to_print(conn, order_id: int) -> list[str]:
-    """Copy every item's original into the print folder. Returns the paths written."""
     order = one(conn, "SELECT * FROM orders WHERE id=?", (order_id,))
-    event = one(conn, "SELECT slug FROM events WHERE id=?", (order["event_id"],))
-    base = f"{settings.nextcloud_print_folder.strip('/')}/{event['slug']}"
-    items = query(conn, "SELECT * FROM order_items WHERE order_id=?", (order_id,))
-
+    event = one(conn, "SELECT slug, nextcloud_id FROM events WHERE id=?", (order["event_id"],))
+    src = settings.nc_instance(event["nextcloud_id"])
+    dst = settings.nc_print_instance()
     written: list[str] = []
-    if not nextcloud.is_configured():
+    if not (src and dst):
         return written
 
-    for it in items:
-        data = nextcloud.download(it["rel_path"])
+    base = f"{settings.nextcloud_print_folder.strip('/')}/{event['slug']}"
+    for it in query(conn, "SELECT * FROM order_items WHERE order_id=?", (order_id,)):
+        data = nextcloud.download(src, it["rel_path"])
         fname = it["filename"]
         dest = f"{base}/{it['size_code']}/{it['qty']}salinan/{fname}"
         ext = posixpath.splitext(fname)[1].lower()
-        nextcloud.upload(dest, data, CONTENT_TYPES.get(ext, "application/octet-stream"))
+        nextcloud.upload(dst, dest, data, CONTENT_TYPES.get(ext, "application/octet-stream"))
         written.append(dest)
     return written
