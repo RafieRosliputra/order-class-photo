@@ -14,19 +14,22 @@ ENV TZ=Asia/Kuala_Lumpur \
 
 WORKDIR /app
 
-# Install uv, then dependencies (layer-cached on lockfile)
+# Install dependencies (deterministic; mirrors pyproject [project].dependencies)
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir uv && \
-    uv pip install --system --no-cache -r <(uv pip compile pyproject.toml 2>/dev/null || true) || \
-    pip install --no-cache-dir \
-        fastapi "uvicorn[standard]" jinja2 python-multipart itsdangerous \
-        pydantic-settings email-validator httpx pillow pdf2image \
-        gspread google-auth aiosmtplib apscheduler python-dateutil
+RUN pip install --no-cache-dir \
+        "fastapi>=0.115.0" "uvicorn[standard]>=0.30.0" "jinja2>=3.1.4" \
+        "python-multipart>=0.0.9" "itsdangerous>=2.2.0" "pydantic-settings>=2.4.0" \
+        "email-validator>=2.2.0" "httpx>=0.27.0" "pillow>=10.4.0" "pdf2image>=1.17.0" \
+        "qrcode>=7.4.2" "gspread>=6.1.2" "google-auth>=2.34.0" \
+        "apscheduler>=3.10.4" "python-dateutil>=2.9.0"
 
-# To enable OCR inside the image, uncomment:
+# To enable receipt OCR inside the image, uncomment (adds ~1.5GB):
 # RUN pip install --no-cache-dir paddleocr paddlepaddle
 
 COPY . .
+
+# Generate placeholder logo + PWA icons (replace app/static/img/logo-*.png with real ones later)
+RUN python scripts/gen_icons.py || true
 
 EXPOSE 8000
 
