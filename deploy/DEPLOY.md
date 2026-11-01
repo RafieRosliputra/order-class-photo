@@ -1,6 +1,6 @@
 # Deployment (TrueNAS SCALE + Cloudflare Tunnel)
 
-This is how the live instance is wired on the Johor Studio TrueNAS (`m10`).
+This is how the live instance is wired on the JohorStudio.com TrueNAS (`m10`).
 
 ## TrueNAS
 - **Code**: `/mnt/ssd/website-order` (this repo, `manual-payment` branch).

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ event.name }} — {{ settings.app_name }}{% endblock %}
+{% block title %}{{ event.name }} — {{ t('brand') }}{% endblock %}
 {% block content %}
 <div class="spread">
   <div>
@@ -26,14 +26,15 @@
   <input id="f-search" type="search" placeholder="{{ t('search') }}">
 </div>
 
-<div class="grid" id="grid" data-event-id="{{ event.id }}" data-added-label="{{ t('added_toast') }}">
+<div class="grid" id="grid" data-event-id="{{ event.id }}" data-added-label="{{ t('added_toast') }}" data-err-no-sizes="{{ t('err_no_sizes') }}" data-err-generic="{{ t('err_generic') }}">
   {% for p in photos %}
-  <div class="cell" data-id="{{ p.id }}" data-school="{{ p.school }}" data-class="{{ p.class_name }}"
+  <div class="cell{% if p.width and p.height and p.width > p.height %} land{% endif %}" data-id="{{ p.id }}" data-school="{{ p.school }}" data-class="{{ p.class_name }}"
        data-fname="{{ p.filename }}" data-large="/p/{{ p.id }}/large.webp"
+       data-w="{{ p.width or 0 }}" data-h="{{ p.height or 0 }}"
        style="background-image:url('/p/{{ p.id }}/thumb.webp')">
     <span class="fname">{{ p.filename }}</span>
     <span class="tick"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>
-    <span class="zoom" role="button" aria-label="Zoom"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M10 20H4v-6"/><path d="M20 4l-6 6"/><path d="M4 20l6-6"/></svg></span>
+    <span class="zoom" role="button" aria-label="{{ t('zoom') }}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M10 20H4v-6"/><path d="M20 4l-6 6"/><path d="M4 20l6-6"/></svg></span>
   </div>
   {% endfor %}
 </div>
@@ -45,6 +46,6 @@
   <button class="btn" id="add-btn">{{ t('add_to_cart') }}</button>
 </div>
 
-<div class="lightbox" id="lightbox"><button class="close" aria-label="Close">×</button><div class="img"></div></div>
+<div class="lightbox" id="lightbox"><button class="close" aria-label="{{ t('close') }}">×</button><div class="img"></div></div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/gallery.js" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/js/gallery.js?v=20261102b" defer></script>{% endblock %}

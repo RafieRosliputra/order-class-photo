@@ -15,6 +15,17 @@ from ..pricing import cart_subtotal
 router = APIRouter()
 
 
+def allowed_delivery(event, wanted: str) -> str:
+    """Return the delivery method to use, limited to what the event allows."""
+    pick = bool(event["allow_pickup"]) if event else True
+    post = bool(event["allow_post"]) if event else False
+    if not pick and not post:
+        pick = True
+    if wanted == "post" and post:
+        return "post"
+    return "pickup" if pick else "post"
+
+
 @router.get("/checkout")
 def checkout_page(request: Request):
     cart = read_cart(request)
@@ -56,10 +67,11 @@ def checkout_submit(
     if not customer:
         return RedirectResponse("/login?next=/checkout", status_code=303)
 
-    delivery = "post" if delivery == "post" else "pickup"
+    with db() as conn:
+        event = one(conn, "SELECT * FROM events WHERE id=?", (event_id,))
+    delivery = allowed_delivery(event, delivery)
     if delivery == "post" and not address.strip():
         with db() as conn:
-            event = one(conn, "SELECT * FROM events WHERE id=?", (event_id,))
             subtotal = cart_subtotal(conn, cart)
         return render(request, "checkout.html", {
             "event": event, "subtotal_sen": subtotal, "customer": customer,

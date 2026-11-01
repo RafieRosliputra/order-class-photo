@@ -1,7 +1,7 @@
 """Generate placeholder brand assets (logo + PWA icons).
 
-The real Johor Studio logos could not be fetched automatically. Drop the real
-files in to replace these:
+The real JohorStudio.com logos and icons (copied from the johorstudio-website
+repo) are committed, so this only fills in anything missing:
     app/static/img/logo-dark.png   (dark logo on light bg)
     app/static/img/logo-light.png  (light logo on dark bg)
 Then run this script again (or regenerate icons) if you want icons from the logo.
@@ -18,8 +18,8 @@ ICONS = ROOT / "app" / "static" / "icons"
 IMG.mkdir(parents=True, exist_ok=True)
 ICONS.mkdir(parents=True, exist_ok=True)
 
-SAND = (205, 198, 192)
-INK = (28, 27, 25)
+SAND = (226, 232, 233)   # --mist
+INK = (32, 39, 43)       # --graphite
 
 
 def _font(size: int):
@@ -57,9 +57,11 @@ def main():
         wordmark(IMG / "logo-dark.png", INK, None)
     if not (IMG / "logo-light.png").exists():
         wordmark(IMG / "logo-light.png", (255, 255, 255), None)
-    icon(ICONS / "icon-192.png", 192)
-    icon(ICONS / "icon-512.png", 512)
-    placeholder(IMG / "placeholder.webp")
+    for name, size in (("icon-192.png", 192), ("icon-512.png", 512)):
+        if not (ICONS / name).exists():
+            icon(ICONS / name, size)
+    if not (IMG / "placeholder.webp").exists():
+        placeholder(IMG / "placeholder.webp")
     print("assets written to", IMG, "and", ICONS)
 
 

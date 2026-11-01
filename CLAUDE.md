@@ -3,7 +3,7 @@
 Guidance for AI agents (and humans) working on this repo.
 
 ## What this is
-Server-rendered web app for **Johor Studio** so parents can browse event photos
+Server-rendered web app for **JohorStudio.com** so parents can browse event photos
 (convocation / kindergarten), pick prints, pay **manually** (Maybank QRPay or Bank
 Muamalat transfer), and upload a receipt that is **OCR-verified** against the order
 total. Prints are produced by the studio; there is **no digital download**.

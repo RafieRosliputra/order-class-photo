@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     shutdown_scheduler()
 
 
-app = FastAPI(title="Johor Studio — Photo Order", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title="JohorStudio.com — Photo Order", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

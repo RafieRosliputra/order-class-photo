@@ -1,25 +1,63 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>{% if lang=='ms' %}Galeri Majlis{% else %}Event Galleries{% endif %}</h1>
-<p class="lead">{% if lang=='ms' %}Pilih majlis anak anda untuk mula memilih gambar.{% else %}Choose your child's event to start picking photos.{% endif %}</p>
+<section class="home-head">
+  <h1>{{ t('home_title') }}</h1>
+  <p class="lead">{{ t('home_lead') }}</p>
+</section>
 
 {% if events %}
-<div class="eventlist" style="margin-top:16px">
+<div class="eventlist">
   {% for e in events %}
   <a class="eventcard" href="/e/{{ e.slug }}">
-    <div class="ec-top">
-      <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h4l2-2h6l2 2h4v13H3z"/><circle cx="12" cy="13" r="3.5"/></svg>
+    {% if covers.get(e.id) %}
+    <div class="ec-top" style="background-image:url('/p/{{ covers[e.id] }}/thumb.webp')"></div>
+    {% else %}
+    <div class="ec-top ec-empty">
+      <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h4l2-2h6l2 2h4v13H3z"/><circle cx="12" cy="13" r="3.5"/></svg>
     </div>
+    {% endif %}
     <div class="ec-body">
-      <div style="font-weight:700">{{ e.name }}</div>
-      <div class="note">{{ e.event_date or '' }}</div>
+      <div class="ec-name">{{ e.name }}</div>
+      {% if e.event_date %}<div class="note">{{ e.event_date }}</div>{% endif %}
+      <span class="ec-go">{{ t('open_gallery') }} →</span>
     </div>
   </a>
   {% endfor %}
 </div>
 {% else %}
-<div class="card" style="margin-top:16px">
-  <p class="muted">{% if lang=='ms' %}Tiada majlis dibuka buat masa ini.{% else %}No events are open right now.{% endif %}</p>
+<div class="card">
+  <p class="muted" style="margin:0">{{ t('no_events') }}</p>
 </div>
 {% endif %}
+
+<section class="how">
+  <ol class="how-steps">
+    <li><span>1</span><div><strong>{{ t('how1_t') }}</strong><p>{{ t('how1_d') }}</p></div></li>
+    <li><span>2</span><div><strong>{{ t('how2_t') }}</strong><p>{{ t('how2_d') }}</p></div></li>
+    <li><span>3</span><div><strong>{{ t('how3_t') }}</strong><p>{{ t('how3_d') }}</p></div></li>
+  </ol>
+  <a class="btn ghost sm" href="/help">{{ t('help_full') }}</a>
+</section>
+
+{% if slides %}
+<section class="carousel" aria-roledescription="carousel" aria-label="{{ t('our_work') }}">
+  <div class="car-track">
+    {% for s in slides %}
+    <figure class="car-slide{{ ' on' if loop.first }}" aria-hidden="{{ 'false' if loop.first else 'true' }}">
+      <img src="/slides/{{ s.file }}" alt="{{ s.caption }}" {{ 'loading=lazy' if not loop.first }} draggable="false">
+      {% if s.caption %}<figcaption>{{ s.caption }}</figcaption>{% endif %}
+    </figure>
+    {% endfor %}
+  </div>
+  {% if slides|length > 1 %}
+  <button class="car-nav prev" type="button" aria-label="{{ t('prev') }}">‹</button>
+  <button class="car-nav next" type="button" aria-label="{{ t('next') }}">›</button>
+  <div class="car-dots">
+    {% for s in slides %}<button type="button" class="{{ 'on' if loop.first }}" aria-label="{{ loop.index }}"></button>{% endfor %}
+  </div>
+  {% endif %}
+</section>
+<p class="car-more"><a href="https://johorstudio.com/portfolio.html" target="_blank" rel="noopener">{{ t('see_portfolio') }} →</a></p>
+{% endif %}
 {% endblock %}
+{% block scripts %}{% if slides|length > 1 %}<script src="/static/js/carousel.js" defer></script>{% endif %}{% endblock %}

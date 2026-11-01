@@ -1,4 +1,4 @@
-"""Login codes (two 2-digit numbers), signed-cookie sessions, and lockout."""
+"""Login codes (4 digits, no spaces), signed-cookie sessions, and lockout."""
 from __future__ import annotations
 
 import secrets
@@ -32,8 +32,13 @@ def _parse(s: str | None) -> datetime | None:
 
 # --- login code ----------------------------------------------------------
 def generate_code() -> str:
-    """Two 2-digit numbers, e.g. '21 88' (easy to type, not high-security)."""
-    return f"{secrets.randbelow(90) + 10} {secrets.randbelow(90) + 10}"
+    """Four digits, e.g. '2188' (easy to type, not high-security)."""
+    return f"{secrets.randbelow(9000) + 1000}"
+
+
+def normalise_code(code: str) -> str:
+    """Keep digits only, so '21 88', '21-88' and '2188' all match."""
+    return "".join(ch for ch in (code or "") if ch.isdigit())
 
 
 def start_login(conn, email: str) -> tuple[bool, str, int]:
@@ -70,7 +75,7 @@ def start_login(conn, email: str) -> tuple[bool, str, int]:
 def verify_code(conn, email: str, code: str) -> tuple[bool, str]:
     """Check a submitted code. Returns (ok, message_key)."""
     email = email.strip().lower()
-    code = " ".join(code.split())  # normalise whitespace
+    code = normalise_code(code)
     row = one(conn, "SELECT * FROM login_codes WHERE email=?", (email,))
     n = now()
     if not row:
@@ -84,7 +89,7 @@ def verify_code(conn, email: str, code: str) -> tuple[bool, str]:
     if _parse(row["expires_at"]) and _parse(row["expires_at"]) < n:
         return False, "expired"
 
-    if code == row["code"]:
+    if code and code == normalise_code(row["code"]):
         conn.execute("DELETE FROM login_codes WHERE email=?", (email,))
         return True, "ok"
 

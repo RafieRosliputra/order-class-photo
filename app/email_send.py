@@ -16,6 +16,8 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from .config import settings
 from .utils import rm
 
+BRAND = "JohorStudio.com"
+
 _env = Environment(
     loader=FileSystemLoader(str(Path(__file__).parent / "templates" / "emails")),
     autoescape=select_autoescape(["html"]),
@@ -66,12 +68,12 @@ def _smtp_password() -> str:
 
 def send_login_code(to: str, code: str) -> None:
     subject = f"Kod log masuk / Login code: {code}"
-    html = _env.get_template("login_code.html").render(code=code, brand=settings.app_name)
+    html = _env.get_template("login_code.html").render(code=code, brand=BRAND)
     text = (
         f"Kod log masuk anda: {code}\n"
         f"Your login code: {code}\n\n"
         f"Sah untuk {settings.login_code_ttl_seconds // 60} minit / "
-        f"Valid for {settings.login_code_ttl_seconds // 60} minutes.\n— {settings.app_name}"
+        f"Valid for {settings.login_code_ttl_seconds // 60} minutes.\n— {BRAND}"
     )
     _send(to, subject, html, text)
 
@@ -79,11 +81,11 @@ def send_login_code(to: str, code: str) -> None:
 def send_payment_confirmed(to: str, order_no: str, total_sen: int, status_url: str) -> None:
     subject = f"Bayaran diterima / Payment received — {order_no}"
     html = _env.get_template("payment_confirmed.html").render(
-        order_no=order_no, total=rm(total_sen), status_url=status_url, brand=settings.app_name,
+        order_no=order_no, total=rm(total_sen), status_url=status_url, brand=BRAND,
     )
     text = (
         f"Terima kasih! Bayaran untuk order {order_no} telah disahkan ({rm(total_sen)}).\n"
         f"Thank you! Payment for order {order_no} is confirmed ({rm(total_sen)}).\n\n"
-        f"Semak status / Check status: {status_url}\n— {settings.app_name}"
+        f"Semak status / Check status: {status_url}\n— {BRAND}"
     )
     _send(to, subject, html, text)

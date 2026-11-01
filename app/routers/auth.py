@@ -1,4 +1,4 @@
-"""Passwordless login: emailed 2×2-digit code, then phone capture."""
+"""Passwordless login: emailed 4-digit code, then phone capture."""
 from __future__ import annotations
 
 import json

@@ -1,4 +1,4 @@
-# Johor Studio — Photo Order
+# JohorStudio.com — Photo Order
 # App only. Nextcloud and Cloudflare Tunnel (cloudflared) are assumed to run
 # separately on the TrueNAS host. Cloudflare Tunnel points shop.johorstudio.com
 # at http://<this-host>:8000 and protects /admin with Cloudflare Access.

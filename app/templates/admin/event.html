@@ -3,10 +3,20 @@
 {% block content %}
 <div class="spread"><h1>{{ event.name }}</h1>
   <a class="btn ghost sm" href="/admin/orders?event={{ event.id }}">Orders</a></div>
+{% set share_url = public_base ~ '/e/' ~ event.slug %}
+<div class="card share" style="margin:12px 0">
+  <label for="share-url">Link untuk customer</label>
+  <div class="row" style="gap:8px">
+    <input id="share-url" value="{{ share_url }}" readonly onclick="this.select()">
+    <button type="button" class="btn sm" data-copy="#share-url">Copy link</button>
+    <a class="btn ghost sm" href="https://wa.me/?text={{ (event.name ~ ' — ' ~ share_url)|urlencode }}" target="_blank" rel="noopener">Kongsi WhatsApp</a>
+  </div>
+</div>
 {% if request.query_params.get('import') %}<p class="ok">Import started in background — refresh in a moment.</p>{% endif %}
 
 <div class="grid2">
-  <form method="post" action="/admin/events/{{ event.id }}/edit" class="card stack">
+  <form method="post" action="/admin/events/{{ event.id }}/edit" class="card stack" enctype="multipart/form-data">
+    {% if request.query_params.get("qr_error") %}<p class="error">Gambar QR tidak sah. Guna PNG, JPG atau WebP (maks 8MB).</p>{% endif %}
     <h2>Settings</h2>
     <div class="field"><label>Name</label><input name="name" value="{{ event.name }}" required></div>
     <div class="grid2">
@@ -34,15 +44,27 @@
       </div>
     </div>
     <div class="field"><label>Class delimiter</label><input name="class_delimiter" value="{{ event.class_delimiter }}"></div>
-    <div class="field"><label>Pickup location</label><input name="pickup_location" value="{{ event.pickup_location }}"></div>
-    <div class="grid2">
-      <div class="field"><label>Bank Muamalat no.</label><input name="pay_bank_no" value="{{ event.pay_bank_no }}"></div>
-      <div class="field"><label>QRPay image URL</label><input name="pay_qrpay_image" value="{{ event.pay_qrpay_image }}"></div>
+
+    <div class="field"><label>Bank Muamalat no.</label><input name="pay_bank_no" value="{{ event.pay_bank_no }}"></div>
+    {% set qr_current = event.pay_qrpay_image or '' %}
+    <div class="field"><label>QR bayaran (QRPay / DuitNow)</label>
+      <div class="qr-upload">
+        {% if qr_current %}<img id="qr-preview" src="{{ qr_current }}" alt="QR semasa">
+        {% else %}<div class="qr-empty" id="qr-empty">Tiada QR lagi</div><img id="qr-preview" class="hidden" alt="">{% endif %}
+        <div class="stack" style="gap:8px">
+          <label class="btn ghost sm file-btn" style="margin:0">
+            {% if qr_current %}Tukar gambar QR{% else %}Upload gambar QR{% endif %}
+            <input type="file" name="qr_file" id="qr-file" accept="image/png,image/jpeg,image/webp">
+          </label>
+          <span class="note" id="qr-name">PNG, JPG atau WebP · maks 8MB</span>
+          {% if qr_current %}<label class="row note" style="gap:6px;font-weight:500;margin:0"><input type="checkbox" name="qr_remove" value="1" style="width:auto"> Buang QR</label>{% endif %}
+        </div>
+      </div>
+      <input type="hidden" name="pay_qrpay_image" value="{{ qr_current }}">
     </div>
-    <div class="grid2">
-      <div class="field"><label>Postage West (RM)</label><input name="postage_west" value="{{ '%.2f'|format(event.postage_west_sen/100) }}"></div>
-      <div class="field"><label>Postage East (RM)</label><input name="postage_east" value="{{ '%.2f'|format(event.postage_east_sen/100) }}"></div>
-    </div>
+    {% set ev_pick, ev_post, ev_loc = event.allow_pickup, event.allow_post, event.pickup_location %}
+    {% set ev_west, ev_east = '%.2f'|format(event.postage_west_sen/100), '%.2f'|format(event.postage_east_sen/100) %}
+    {% include "admin/_delivery.html" %}
     <button class="btn" type="submit">Save</button>
   </form>
 
@@ -91,4 +113,16 @@
   {% if not classes %}<p class="muted">No classes imported yet.</p>{% endif %}
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/ncbrowse.js" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/js/ncbrowse.js" defer></script>
+<script>
+(function(){
+  var f=document.getElementById('qr-file'); if(!f) return;
+  f.addEventListener('change',function(){
+    var file=f.files&&f.files[0]; if(!file) return;
+    document.getElementById('qr-name').textContent=file.name;
+    var img=document.getElementById('qr-preview'), empty=document.getElementById('qr-empty');
+    img.src=URL.createObjectURL(file); img.classList.remove('hidden'); if(empty) empty.classList.add('hidden');
+  });
+})();
+</script>
+{% endblock %}

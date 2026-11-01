@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Form, Request
+from fastapi import APIRouter, BackgroundTasks, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import imaging, nextcloud, sheets, backup, printing
@@ -22,6 +22,24 @@ router = APIRouter(prefix="/admin")
 
 def admin_email(request: Request) -> str:
     return request.headers.get(settings.admin_email_header, "admin@local")
+
+
+async def _qr_from_upload(qr_file: UploadFile | None, event_id: int) -> str | None:
+    """Store an uploaded QR image; None if no file was chosen."""
+    if qr_file is None or not qr_file.filename:
+        return None
+    data = await qr_file.read()
+    if not data:
+        return None
+    return imaging.save_qr_image(data, event_id)
+
+
+def _delivery_flags(allow_pickup: str, allow_post: str) -> tuple[int, int]:
+    """At least one delivery option stays on; with none ticked, fall back to pickup."""
+    pick, post = int(bool(allow_pickup)), int(bool(allow_post))
+    if not pick and not post:
+        pick = 1
+    return pick, post
 
 
 # --- dashboard -------------------------------------------------------------
@@ -47,24 +65,35 @@ def event_new(request: Request):
 
 
 @router.post("/events/new")
-def event_create(request: Request, name: str = Form(...), event_date: str = Form(""),
+async def event_create(request: Request, name: str = Form(...), event_date: str = Form(""),
                  nextcloud_id: str = Form(""), nextcloud_folder: str = Form(""),
                  class_delimiter: str = Form(" - "),
                  close_date: str = Form(""), pickup_location: str = Form(""),
                  pay_bank_no: str = Form(""), pay_qrpay_image: str = Form(""),
-                 postage_west: str = Form("10"), postage_east: str = Form("18")):
+                 qr_file: UploadFile | None = File(None),
+                 postage_west: str = Form("10"), postage_east: str = Form("18"),
+                 allow_pickup: str = Form(""), allow_post: str = Form("")):
+    pick, post = _delivery_flags(allow_pickup, allow_post)
     with db() as conn:
         slug = unique_slug(conn, name)
         eid = conn.execute(
             """INSERT INTO events(slug, name, event_date, nextcloud_id, nextcloud_folder,
                    class_delimiter, close_date, pickup_location, pay_bank_no, pay_qrpay_image,
-                   postage_west_sen, postage_east_sen)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   postage_west_sen, postage_east_sen, allow_pickup, allow_post)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (slug, name, event_date, nextcloud_id, nextcloud_folder.strip("/"),
              class_delimiter or " - ", close_date, pickup_location, pay_bank_no, pay_qrpay_image,
-             to_sen(postage_west or 0), to_sen(postage_east or 0)),
+             to_sen(postage_west or 0), to_sen(postage_east or 0), pick, post),
         ).lastrowid
         audit(conn, admin_email(request), "event_created", "event", eid, name)
+    try:
+        qr_url = await _qr_from_upload(qr_file, eid)
+    except ValueError:
+        return RedirectResponse(f"/admin/events/{eid}?qr_error=1", status_code=303)
+    if qr_url:
+        with db() as conn:
+            conn.execute("UPDATE events SET pay_qrpay_image=? WHERE id=?", (qr_url, eid))
+            audit(conn, admin_email(request), "event_qr_uploaded", "event", eid, qr_url)
     return RedirectResponse(f"/admin/events/{eid}", status_code=303)
 
 
@@ -102,24 +131,40 @@ def event_admin(event_id: int, request: Request):
 
 
 @router.post("/events/{event_id}/edit")
-def event_edit(event_id: int, request: Request, name: str = Form(...), event_date: str = Form(""),
+async def event_edit(event_id: int, request: Request, name: str = Form(...), event_date: str = Form(""),
                nextcloud_id: str = Form(""), nextcloud_folder: str = Form(""),
                class_delimiter: str = Form(" - "),
                close_date: str = Form(""), status: str = Form("open"),
                pickup_location: str = Form(""), pay_bank_no: str = Form(""),
                pay_qrpay_image: str = Form(""), postage_west: str = Form("10"),
-               postage_east: str = Form("18")):
+               postage_east: str = Form("18"), qr_file: UploadFile | None = File(None),
+               qr_remove: str = Form(""), allow_pickup: str = Form(""),
+               allow_post: str = Form("")):
+    pick, post = _delivery_flags(allow_pickup, allow_post)
+    qr_error = False
+    try:
+        qr_url = await _qr_from_upload(qr_file, event_id)
+    except ValueError:
+        qr_url, qr_error = None, True
+    if qr_url:
+        pay_qrpay_image = qr_url
+    elif qr_remove:
+        pay_qrpay_image = ""
     with db() as conn:
         conn.execute(
             """UPDATE events SET name=?, event_date=?, nextcloud_id=?, nextcloud_folder=?,
                    class_delimiter=?, close_date=?, status=?, pickup_location=?, pay_bank_no=?,
-                   pay_qrpay_image=?, postage_west_sen=?, postage_east_sen=? WHERE id=?""",
+                   pay_qrpay_image=?, postage_west_sen=?, postage_east_sen=?,
+                   allow_pickup=?, allow_post=? WHERE id=?""",
             (name, event_date, nextcloud_id, nextcloud_folder.strip("/"), class_delimiter or " - ",
              close_date, status, pickup_location, pay_bank_no, pay_qrpay_image,
-             to_sen(postage_west or 0), to_sen(postage_east or 0), event_id),
+             to_sen(postage_west or 0), to_sen(postage_east or 0), pick, post, event_id),
         )
         audit(conn, admin_email(request), "event_edited", "event", event_id, name)
-    return RedirectResponse(f"/admin/events/{event_id}", status_code=303)
+        if qr_url:
+            audit(conn, admin_email(request), "event_qr_uploaded", "event", event_id, qr_url)
+    suffix = "?qr_error=1" if qr_error else ""
+    return RedirectResponse(f"/admin/events/{event_id}{suffix}", status_code=303)
 
 
 # --- sizes -----------------------------------------------------------------
@@ -349,3 +394,66 @@ def admin_audit(request: Request):
     with db() as conn:
         rows = query(conn, "SELECT * FROM audit_log ORDER BY id DESC LIMIT 300")
     return render(request, "admin/audit.html", {"rows": rows})
+
+
+# --- home-page carousel ----------------------------------------------------
+@router.get("/slides")
+def slides_admin(request: Request):
+    with db() as conn:
+        slides = query(conn, "SELECT * FROM slides ORDER BY sort, id")
+    return render(request, "admin/slides.html", {"slides": slides})
+
+
+@router.post("/slides")
+async def slides_upload(request: Request, files: list[UploadFile] = File(...)):
+    saved, bad = 0, 0
+    for f in files:
+        if not f.filename:
+            continue
+        try:
+            name = imaging.save_slide_image(await f.read())
+        except ValueError:
+            bad += 1
+            continue
+        with db() as conn:
+            top = one(conn, "SELECT COALESCE(MAX(sort), 0) m FROM slides")["m"]
+            sid = conn.execute("INSERT INTO slides(file, sort) VALUES (?,?)", (name, top + 1)).lastrowid
+            audit(conn, admin_email(request), "slide_added", "slide", sid, f.filename)
+        saved += 1
+    return RedirectResponse(f"/admin/slides?saved={saved}&bad={bad}", status_code=303)
+
+
+@router.post("/slides/{slide_id}/update")
+def slide_update(slide_id: int, request: Request, caption: str = Form(""), active: str = Form("")):
+    with db() as conn:
+        conn.execute("UPDATE slides SET caption=?, active=? WHERE id=?",
+                     (caption.strip(), int(bool(active)), slide_id))
+        audit(conn, admin_email(request), "slide_edited", "slide", slide_id, caption.strip())
+    return RedirectResponse("/admin/slides", status_code=303)
+
+
+@router.post("/slides/{slide_id}/move")
+def slide_move(slide_id: int, request: Request, direction: str = Form("up")):
+    with db() as conn:
+        rows = [r["id"] for r in query(conn, "SELECT id FROM slides ORDER BY sort, id")]
+        if slide_id in rows:
+            i = rows.index(slide_id)
+            j = i - 1 if direction == "up" else i + 1
+            if 0 <= j < len(rows):
+                rows[i], rows[j] = rows[j], rows[i]
+            for pos, sid in enumerate(rows, start=1):
+                conn.execute("UPDATE slides SET sort=? WHERE id=?", (pos, sid))
+    return RedirectResponse("/admin/slides", status_code=303)
+
+
+@router.post("/slides/{slide_id}/delete")
+def slide_delete(slide_id: int, request: Request):
+    with db() as conn:
+        row = one(conn, "SELECT file FROM slides WHERE id=?", (slide_id,))
+        if row:
+            conn.execute("DELETE FROM slides WHERE id=?", (slide_id,))
+            audit(conn, admin_email(request), "slide_deleted", "slide", slide_id, row["file"])
+            still_used = one(conn, "SELECT 1 FROM slides WHERE file=?", (row["file"],))
+            if not still_used:
+                (settings.slides_dir / row["file"]).unlink(missing_ok=True)
+    return RedirectResponse("/admin/slides", status_code=303)

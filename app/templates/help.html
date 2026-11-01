@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ t('help_title') }} — {{ t('brand') }}{% endblock %}
+{% block content %}
+<section class="home-head">
+  <h1>{{ t('help_title') }}</h1>
+  <p class="lead">{{ t('help_lead') }}</p>
+</section>
+
+<ol class="help-steps">
+  {% for n in range(1, 7) %}
+  <li>
+    <span class="num">{{ n }}</span>
+    <div>
+      <h2>{{ t('hs' ~ n ~ '_t') }}</h2>
+      <p>{{ t('hs' ~ n ~ '_d') }}</p>
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+
+<section class="card faq">
+  <h2>{{ t('faq_title') }}</h2>
+  {% for n in range(1, 6) %}
+  <details>
+    <summary>{{ t('faq' ~ n ~ '_q') }}</summary>
+    <p>{{ t('faq' ~ n ~ '_a') }}</p>
+  </details>
+  {% endfor %}
+</section>
+
+{% set help_href = 'https://wa.me/' ~ settings.whatsapp_number ~ '?text=' ~ t('help_msg')|urlencode %}
+<div style="margin-top:16px">{% include "_help.html" %}</div>
+{% endblock %}

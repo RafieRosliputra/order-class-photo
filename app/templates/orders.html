@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% block title %}{{ t('nav_orders') }} — {{ settings.app_name }}{% endblock %}
+{% block title %}{{ t('nav_orders') }} — {{ t('brand') }}{% endblock %}
 {% block content %}
-<h1>{{ t('nav_orders') }}</h1>
+<div class="spread"><h1>{{ t('nav_orders') }}</h1>
+  <a class="btn ghost sm" href="/logout?next=/">{{ t('nav_logout') }}</a></div>
 {% if not orders %}
   <div class="card"><p class="muted">{% if lang=='ms' %}Belum ada order.{% else %}No orders yet.{% endif %}</p></div>
 {% else %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Carousel — Admin{% endblock %}
+{% block content %}
+<div class="spread"><h1>Carousel main page</h1>
+  <a class="btn ghost sm" href="/admin">← Admin</a></div>
+<p class="note">Gambar ini bergerak di bawah senarai majlis pada main page shop. Guna gambar landscape (contoh 1920×1080). Yang tidak aktif tidak dipapar.</p>
+
+{% set saved = request.query_params.get('saved') %}{% set bad = request.query_params.get('bad') %}
+{% if saved and saved != '0' %}<p class="ok">{{ saved }} gambar ditambah.</p>{% endif %}
+{% if bad and bad != '0' %}<p class="error">{{ bad }} fail bukan gambar yang sah (maks 25MB) dan diabaikan.</p>{% endif %}
+
+<form method="post" action="/admin/slides" enctype="multipart/form-data" class="card stack">
+  <label class="btn ghost file-btn" style="margin:0">
+    Pilih gambar (boleh banyak)
+    <input type="file" name="files" id="slide-files" accept="image/jpeg,image/png,image/webp" multiple required>
+  </label>
+  <span class="note" id="slide-names">JPG, PNG atau WebP</span>
+  <button class="btn" type="submit">Upload</button>
+</form>
+
+<div class="slide-admin" style="margin-top:16px">
+  {% for s in slides %}
+  <div class="card slide-row{{ '' if s.active else ' off' }}">
+    <img src="/slides/{{ s.file }}" alt="" loading="lazy">
+    <form method="post" action="/admin/slides/{{ s.id }}/update" class="stack" style="gap:8px;flex:1">
+      <input name="caption" value="{{ s.caption }}" placeholder="Kapsyen (pilihan)">
+      <label class="row note" style="gap:6px;margin:0"><input type="checkbox" name="active" value="1" {{ 'checked' if s.active }} style="width:auto"> Aktif</label>
+      <button class="btn sm" type="submit">Simpan</button>
+    </form>
+    <div class="stack" style="gap:6px">
+      <form method="post" action="/admin/slides/{{ s.id }}/move"><input type="hidden" name="direction" value="up"><button class="btn ghost sm" type="submit" aria-label="Naik" {{ 'disabled' if loop.first }}>↑</button></form>
+      <form method="post" action="/admin/slides/{{ s.id }}/move"><input type="hidden" name="direction" value="down"><button class="btn ghost sm" type="submit" aria-label="Turun" {{ 'disabled' if loop.last }}>↓</button></form>
+      <form method="post" action="/admin/slides/{{ s.id }}/delete" onsubmit="return confirm('Padam gambar ini?')"><button class="btn ghost sm" type="submit">Padam</button></form>
+    </div>
+  </div>
+  {% else %}
+  <div class="card"><p class="muted" style="margin:0">Tiada gambar lagi. Main page akan papar senarai majlis sahaja.</p></div>
+  {% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var f=document.getElementById('slide-files'); if(!f) return;
+  f.addEventListener('change',function(){
+    var n=f.files.length;
+    document.getElementById('slide-names').textContent = n ? n+' fail dipilih' : 'JPG, PNG atau WebP';
+  });
+})();
+</script>
+{% endblock %}

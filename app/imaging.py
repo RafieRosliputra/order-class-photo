@@ -81,3 +81,58 @@ def trash_original(data: bytes, orig_filename: str, stem: str) -> Path:
     out = settings.trash_dir / f"{stem}{ext}"
     out.write_bytes(data)
     return out
+
+
+QR_MAX_BYTES = 8 * 1024 * 1024
+
+
+def save_qr_image(data: bytes, event_id: int) -> str:
+    """Validate an uploaded payment QR (PNG/JPG/WebP) and store it as PNG.
+
+    Returns the public URL path (/qr/<file>). Raises ValueError if not an image.
+    PNG keeps the QR modules sharp; the image is only downscaled if huge.
+    """
+    if not data or len(data) > QR_MAX_BYTES:
+        raise ValueError("size")
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.verify()
+        img = Image.open(io.BytesIO(data))
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError("not_image") from exc
+    img = ImageOps.exif_transpose(img)
+    if img.mode not in ("RGB", "L", "RGBA"):
+        img = img.convert("RGB")
+    img.thumbnail((1600, 1600))
+    settings.qr_dir.mkdir(parents=True, exist_ok=True)
+    name = f"event-{int(event_id)}-{_hash(data)[:10]}.png"
+    img.save(settings.qr_dir / name, "PNG", optimize=True)
+    return f"/qr/{name}"
+
+
+SLIDE_MAX_BYTES = 25 * 1024 * 1024
+SLIDE_MAX = 2000     # px, long edge for home-page carousel images
+
+
+def save_slide_image(data: bytes) -> str:
+    """Validate an uploaded carousel photo and store it as WebP.
+
+    Returns the stored file name (under settings.slides_dir). Raises ValueError
+    if the upload is empty, too large or not an image.
+    """
+    if not data or len(data) > SLIDE_MAX_BYTES:
+        raise ValueError("size")
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.verify()
+        img = Image.open(io.BytesIO(data))
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError("not_image") from exc
+    img = ImageOps.exif_transpose(img)
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    img.thumbnail((SLIDE_MAX, SLIDE_MAX))
+    settings.slides_dir.mkdir(parents=True, exist_ok=True)
+    name = f"slide-{_hash(data)}.webp"
+    img.save(settings.slides_dir / name, "WEBP", quality=82, method=5)
+    return name

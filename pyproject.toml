@@ -1,7 +1,7 @@
 [project]
 name = "johorstudio-photo-order"
 version = "0.1.0"
-description = "Johor Studio — event photo ordering web app (manual payment). Parents browse, pick prints, pay manually, upload receipt (OCR-verified)."
+description = "JohorStudio.com — event photo ordering web app (manual payment). Parents browse, pick prints, pay manually, upload receipt (OCR-verified)."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

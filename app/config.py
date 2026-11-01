@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # App
-    app_name: str = "Johor Studio"
+    app_name: str = "JohorStudio.com"
     app_env: str = "production"
     secret_key: str = "dev-insecure-change-me"
     base_url: str = "http://localhost:8000"
@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     smtp_verify: bool = True   # set false for an internal self-signed relay (LAN)
     smtp_password_file: str = ""  # if set, the SMTP password is read from this file (live sync)
-    email_from: str = "Johor Studio <order@johorstudio.com>"
+    email_from: str = "JohorStudio.com <order@johorstudio.com>"
 
     # WhatsApp
     whatsapp_number: str = "60127983745"
@@ -110,6 +110,16 @@ class Settings(BaseSettings):
     def backups_dir(self) -> Path:
         return self.data_path / "backups"
 
+    @property
+    def qr_dir(self) -> Path:
+        """Payment QR images uploaded from the admin panel."""
+        return self.data_path / "qr"
+
+    @property
+    def slides_dir(self) -> Path:
+        """Home-page carousel images uploaded from the admin panel."""
+        return self.data_path / "slides"
+
     def ensure_dirs(self) -> None:
         for p in (
             Path(self.sqlite_path).parent,
@@ -119,6 +129,8 @@ class Settings(BaseSettings):
             self.receipts_dir,
             self.trash_dir,
             self.backups_dir,
+            self.qr_dir,
+            self.slides_dir,
         ):
             p.mkdir(parents=True, exist_ok=True)
 

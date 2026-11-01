@@ -1,4 +1,4 @@
-# Johor Studio — Photo Order
+# JohorStudio.com — Photo Order
 
 Server-rendered web app that lets parents browse event photos (convocation /
 kindergarten), pick prints, pay **manually** (Maybank QRPay or Bank Muamalat
@@ -18,7 +18,7 @@ Prints are produced by the studio and collected at school or posted — there is
   separate project.)
 - **Cart**: add from the gallery, then choose size + quantity (1–20) per photo,
   across all classes in one event. Per-size pricing, no minimum.
-- **Login**: passwordless. A two-number code (e.g. `21 88`) is emailed; after
+- **Login**: passwordless. A 4-digit code (e.g. `2188`) is emailed; after
   verifying, the customer sets a phone number. 30-day “remember me”. 5 wrong codes
   → 15-minute lock.
 - **Checkout**: pickup at the event’s school (free) or post (RM10 Peninsular /

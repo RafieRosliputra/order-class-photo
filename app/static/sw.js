@@ -1,5 +1,5 @@
 // Minimal service worker: cache-first for static assets only.
-const CACHE = 'js-photo-v1';
+const CACHE = 'js-photo-v2';
 const ASSETS = ['/static/css/style.css', '/static/js/app.js', '/static/js/gallery.js'];
 
 self.addEventListener('install', (e) => {

@@ -1,0 +1,14 @@
+{# Delivery options. Needs ev_pick, ev_post, ev_loc, ev_west, ev_east. #}
+<fieldset class="field delivery-opts">
+  <legend>Penghantaran</legend>
+  <label class="row" style="gap:8px;margin:0"><input type="checkbox" name="allow_pickup" value="1" {{ 'checked' if ev_pick }} style="width:auto" data-toggle="#pickup-box"> Ambil sendiri</label>
+  <div id="pickup-box" class="field{{ '' if ev_pick else ' hidden' }}" style="margin:6px 0 10px 26px">
+    <label>Lokasi ambil</label><input name="pickup_location" value="{{ ev_loc }}" placeholder="Contoh: Dewan sekolah / Studio Bandar Putra">
+  </div>
+  <label class="row" style="gap:8px;margin:0"><input type="checkbox" name="allow_post" value="1" {{ 'checked' if ev_post }} style="width:auto" data-toggle="#post-box"> Pos</label>
+  <div id="post-box" class="grid2{{ '' if ev_post else ' hidden' }}" style="margin:6px 0 0 26px">
+    <div class="field"><label>Caj pos Semenanjung (RM)</label><input name="postage_west" value="{{ ev_west }}"></div>
+    <div class="field"><label>Caj pos Sabah/Sarawak (RM)</label><input name="postage_east" value="{{ ev_east }}"></div>
+  </div>
+  <span class="note">Jika hanya "Ambil sendiri" ditick, customer tidak nampak pilihan penghantaran. Jika kedua-dua tidak ditick, "Ambil sendiri" digunakan.</span>
+</fieldset>

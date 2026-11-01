@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ order.order_no }} — {{ settings.app_name }}{% endblock %}
+{% block title %}{{ order.order_no }} — {{ t('brand') }}{% endblock %}
 {% block content %}
 {% set wa = whatsapp_link((event.name ~ ' — ' ~ order.order_no), order.order_no, customer.email, order.phone_used or customer.phone) %}
 <div class="spread">
@@ -104,6 +104,7 @@
 </div>
 {% endif %}
 
-<a class="btn sand block" href="{{ wa }}" target="_blank" rel="noopener">{{ t('contact_whatsapp') }}</a>
+{% set help_href = wa %}
+<div style="margin-top:16px">{% include "_help.html" %}</div>
 {% endblock %}
 {% block scripts %}<script>window.__wa="{{ wa }}";</script>{% endblock %}

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
+from urllib.parse import quote
 from pathlib import Path
 
 from fastapi import Request
@@ -30,7 +32,17 @@ def get_lang(request: Request) -> str:
     c = request.cookies.get(LANG_COOKIE)
     if c in i18n.LANGS:
         return c
-    return settings.default_lang
+    return i18n.from_accept_language(request.headers.get("accept-language", ""), settings.default_lang)
+
+
+def public_base(request: Request) -> str:
+    """Site address for links admins share (BASE_URL, or the host being visited)."""
+    base = (settings.base_url or "").rstrip("/")
+    if base and "localhost" not in base and "127.0.0.1" not in base:
+        return base
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    return f"{proto}://{host}" if host else base
 
 
 # --- session / customer ----------------------------------------------------
@@ -95,6 +107,10 @@ def render(request: Request, name: str, ctx: dict | None = None):
         "umami_src": settings.umami_src,
         "umami_id": settings.umami_website_id,
         "status_flow": i18n.STATUS_KEYS,
+        # current page (path + query) for the BM/EN switch, URL-encoded
+        "year": datetime.now().year,
+        "public_base": public_base(request),
+        "here": quote(request.url.path + (("?" + request.url.query) if request.url.query else ""), safe="/"),
     }
     if ctx:
         base.update(ctx)

@@ -9,17 +9,19 @@ LANGS = ("ms", "en")
 
 STRINGS: dict[str, dict[str, str]] = {
     # generic
-    "brand": {"ms": "Johor Studio", "en": "Johor Studio"},
+    "brand": {"ms": "JohorStudio.com", "en": "JohorStudio.com"},
     "nav_orders": {"ms": "Order Saya", "en": "My Orders"},
     "nav_login": {"ms": "Log Masuk", "en": "Log In"},
     "nav_logout": {"ms": "Log Keluar", "en": "Log Out"},
     "lang_switch": {"ms": "EN", "en": "BM"},
+    "language": {"ms": "Bahasa", "en": "Language"},
     "back": {"ms": "Kembali", "en": "Back"},
     "continue": {"ms": "Teruskan", "en": "Continue"},
     "cancel": {"ms": "Batal", "en": "Cancel"},
     "search": {"ms": "Cari no. gambar / nama fail", "en": "Search photo no. / filename"},
-    "all_schools": {"ms": "Semua sekolah", "en": "All schools"},
-    "all_classes": {"ms": "Semua kelas", "en": "All classes"},
+    "all_schools": {"ms": "Semua kategori", "en": "All categories"},
+    "all_classes": {"ms": "Semua album", "en": "All albums"},
+    "category": {"ms": "Kategori", "en": "Category"},
     # gallery / cart
     "choose_photos": {"ms": "Pilih gambar", "en": "Choose photos"},
     "add_to_cart": {"ms": "Tambah ke troli", "en": "Add to cart"},
@@ -35,9 +37,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "total": {"ms": "Jumlah", "en": "Total"},
     "checkout": {"ms": "Teruskan ke pembayaran", "en": "Proceed to payment"},
     "added_toast": {"ms": "gambar ditambah ke troli", "en": "photos added to cart"},
+    "err_no_sizes": {"ms": "Saiz cetakan belum ditetapkan untuk majlis ini.", "en": "Print sizes are not set for this event yet."},
+    "err_generic": {"ms": "Ralat. Cuba lagi.", "en": "Something went wrong. Try again."},
+    "zoom": {"ms": "Besarkan", "en": "Zoom"},
+    "close": {"ms": "Tutup", "en": "Close"},
     # delivery
     "delivery": {"ms": "Cara penghantaran", "en": "Delivery method"},
-    "pickup": {"ms": "Ambil di sekolah", "en": "Pickup at school"},
+    "pickup": {"ms": "Ambil sendiri", "en": "Self pickup"},
+    "post_only_note": {"ms": "Cetakan akan dipos ke alamat anda.", "en": "Your prints will be posted to your address."},
     "post": {"ms": "Pos ke rumah", "en": "Post to home"},
     "postage": {"ms": "Caj pos", "en": "Postage"},
     "address": {"ms": "Alamat penuh", "en": "Full address"},
@@ -47,7 +54,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "email": {"ms": "E-mel", "en": "Email"},
     "send_code": {"ms": "Hantar kod", "en": "Send code"},
     "enter_code": {"ms": "Masukkan kod dari e-mel", "en": "Enter the code from your email"},
-    "code_hint": {"ms": "Dua nombor, contoh: 21 88", "en": "Two numbers, e.g. 21 88"},
+    "code_hint": {"ms": "Kod 4 nombor, contoh: 2188", "en": "4-digit code, e.g. 2188"},
     "resend": {"ms": "Hantar semula", "en": "Resend"},
     "verify": {"ms": "Sahkan", "en": "Verify"},
     "your_phone": {"ms": "Nombor telefon anda", "en": "Your phone number"},
@@ -88,16 +95,86 @@ STRINGS: dict[str, dict[str, str]] = {
     "status": {"ms": "Status", "en": "Status"},
     "open_in_maps": {"ms": "Buka dalam Google Maps", "en": "Open in Google Maps"},
     "contact_whatsapp": {"ms": "Hubungi kami di WhatsApp", "en": "Contact us on WhatsApp"},
+    "help_whatsapp": {"ms": "Soalan dan bantuan", "en": "Questions & help"},
+    "help_note": {"ms": "Ada soalan tentang order atau bayaran? Kami sedia membantu di WhatsApp.",
+                  "en": "Questions about your order or payment? We're happy to help on WhatsApp."},
+    "help_msg": {"ms": "Hi Rafi, saya ada soalan tentang tempahan gambar", "en": "Hi Rafi, I have a question about my photo order"},
+    # home
+    "home_title": {"ms": "Galeri Majlis", "en": "Event Galleries"},
+    "home_lead": {"ms": "Pilih majlis anda untuk melihat dan menempah cetakan gambar.",
+                  "en": "Choose your event to view and order photo prints."},
+    "open_gallery": {"ms": "Buka galeri", "en": "Open gallery"},
+    "no_events": {"ms": "Tiada galeri dibuka buat masa ini. Jika anda ada link galeri, buka link tersebut.",
+                  "en": "No galleries are open right now. If you have a gallery link, please open it."},
+    "how1_t": {"ms": "Pilih gambar", "en": "Choose photos"},
+    "how1_d": {"ms": "Buka galeri majlis anda dan tanda gambar yang dikehendaki.", "en": "Open your event gallery and tick the photos you want."},
+    "how2_t": {"ms": "Pilih saiz & bayar", "en": "Pick sizes & pay"},
+    "how2_d": {"ms": "Tetapkan saiz cetakan, bayar melalui QR atau pindahan bank, kemudian upload resit.", "en": "Set print sizes, pay by QR or bank transfer, then upload your receipt."},
+    "how3_t": {"ms": "Terima cetakan", "en": "Receive your prints"},
+    "how3_d": {"ms": "Kami cetak dan sediakan untuk diambil atau dipos.", "en": "We print them, ready for pickup or posting."},
+    "help_full": {"ms": "Panduan penuh", "en": "Full guide"},
+    "our_work": {"ms": "Hasil kerja kami", "en": "Our work"},
+    "see_portfolio": {"ms": "Lihat portfolio di JohorStudio.com", "en": "See our portfolio on JohorStudio.com"},
+    "prev": {"ms": "Sebelum", "en": "Previous"},
+    "next": {"ms": "Seterusnya", "en": "Next"},
+    "nav_shop": {"ms": "Shop", "en": "Shop"},
+    "nav_help": {"ms": "Bantuan", "en": "Help"},
+    # help page
+    "help_title": {"ms": "Cara Membeli", "en": "How to Order"},
+    "help_lead": {"ms": "Tempahan cetakan gambar dalam enam langkah mudah. Semua gambar dicetak oleh JohorStudio.com.",
+                  "en": "Order photo prints in six simple steps. All photos are printed by JohorStudio.com."},
+    "hs1_t": {"ms": "Buka galeri majlis", "en": "Open your event gallery"},
+    "hs1_d": {"ms": "Pilih majlis di halaman utama, atau buka link galeri yang diberikan kepada anda.",
+              "en": "Choose your event on the main page, or open the gallery link you were given."},
+    "hs2_t": {"ms": "Tanda gambar", "en": "Tick your photos"},
+    "hs2_d": {"ms": "Sentuh gambar untuk memilih. Guna ikon besarkan untuk melihat dengan jelas, dan penapis untuk mencari album atau nombor gambar. Tekan \"Tambah ke troli\".",
+              "en": "Tap a photo to select it. Use the zoom icon to view it larger, and the filters to find an album or photo number. Then tap \"Add to cart\"."},
+    "hs3_t": {"ms": "Pilih saiz dan kuantiti", "en": "Choose size and quantity"},
+    "hs3_d": {"ms": "Di troli, tetapkan saiz cetakan dan bilangan salinan bagi setiap gambar. Harga dikira terus.",
+              "en": "In the cart, set the print size and number of copies for each photo. The total updates instantly."},
+    "hs4_t": {"ms": "Log masuk dengan e-mel", "en": "Log in with your email"},
+    "hs4_d": {"ms": "Masukkan e-mel anda. Kami hantar kod 4 nombor, masukkan kod itu, kemudian isi nombor telefon untuk dihubungi.",
+              "en": "Enter your email. We send a 4-digit code; enter it, then add a phone number we can reach you on."},
+    "hs5_t": {"ms": "Bayar dan upload resit", "en": "Pay and upload your receipt"},
+    "hs5_d": {"ms": "Bayar jumlah tepat melalui QR atau pindahan bank, kemudian upload resit (PNG, JPG atau PDF). Resit disemak secara automatik.",
+              "en": "Pay the exact amount by QR or bank transfer, then upload the receipt (PNG, JPG or PDF). Receipts are checked automatically."},
+    "hs6_t": {"ms": "Ambil atau terima cetakan", "en": "Collect or receive your prints"},
+    "hs6_d": {"ms": "Ikuti status di \"Order Saya\". Cetakan disediakan untuk diambil di lokasi yang ditetapkan, atau dipos jika anda memilih pos.",
+              "en": "Track the status under \"My Orders\". Prints are ready to collect at the stated location, or posted if you chose postage."},
+    "faq_title": {"ms": "Soalan lazim", "en": "Common questions"},
+    "faq1_q": {"ms": "Boleh saya muat turun gambar digital?", "en": "Can I download the digital photos?"},
+    "faq1_a": {"ms": "Tidak. Shop ini untuk tempahan cetakan sahaja. Gambar di galeri adalah pratonton dan hak milik JohorStudio.com.",
+               "en": "No. This shop is for print orders only. Gallery images are previews and belong to JohorStudio.com."},
+    "faq2_q": {"ms": "Saya tak terima kod log masuk.", "en": "I didn't receive the login code."},
+    "faq2_a": {"ms": "Semak folder spam atau promosi, dan pastikan e-mel ditulis betul. Anda boleh tekan \"Hantar semula\" selepas seketika.",
+               "en": "Check your spam or promotions folder and make sure the email is correct. You can tap \"Resend\" after a moment."},
+    "faq3_q": {"ms": "Saya terkurang atau terlebih bayar.", "en": "I paid too little or too much."},
+    "faq3_a": {"ms": "Jika terkurang, halaman order akan tunjuk baki untuk dibayar. Jika terlebih, kami akan hubungi anda melalui WhatsApp.",
+               "en": "If you underpaid, your order page shows the balance to pay. If you overpaid, we will contact you via WhatsApp."},
+    "faq4_q": {"ms": "Resit saya belum disahkan.", "en": "My receipt hasn't been confirmed."},
+    "faq4_a": {"ms": "Resit yang tidak dapat dibaca dengan jelas akan disemak secara manual oleh kami. Status akan dikemas kini di \"Order Saya\".",
+               "en": "Receipts that can't be read clearly are checked manually by us. The status will update under \"My Orders\"."},
+    "faq5_q": {"ms": "Boleh saya tambah gambar selepas bayar?", "en": "Can I add photos after paying?"},
+    "faq5_a": {"ms": "Buat order baru untuk gambar tambahan selagi galeri masih dibuka.",
+               "en": "Place a new order for extra photos while the gallery is still open."},
     # footer
     "footer_website": {"ms": "Laman web", "en": "Website"},
     "terms": {"ms": "Terma", "en": "Terms"},
+    "foot_tagline": {
+        "ms": "Penyedia media digital profesional sejak 2014. Fotografi, videografi, multicamera production dan livestreaming di seluruh Malaysia.",
+        "en": "Professional digital media provider since 2014. Photography, videography, multicamera production and livestreaming across Malaysia.",
+    },
+    "foot_contact": {"ms": "Hubungi", "en": "Contact"},
+    "foot_call": {"ms": "Telefon", "en": "Call"},
+    "foot_appointment": {"ms": "Dengan temujanji sahaja", "en": "By appointment only"},
+    "foot_links": {"ms": "Pautan", "en": "Links"},
     "studio_addr": {
         "ms": "3038-A, Jln Merbau Satu, Bandar Putra, 81000 Kulai, Johor",
         "en": "3038-A, Jln Merbau Satu, Bandar Putra, 81000 Kulai, Johor",
     },
     "no_save_note": {
-        "ms": "Gambar ini hak milik Johor Studio dan tidak boleh disimpan.",
-        "en": "These photos belong to Johor Studio and may not be saved.",
+        "ms": "Gambar ini hak milik JohorStudio.com dan tidak boleh disimpan.",
+        "en": "These photos belong to JohorStudio.com and may not be saved.",
     },
     "event_closed": {"ms": "Tempahan untuk majlis ini telah ditutup.", "en": "Ordering for this event is closed."},
 }
@@ -110,6 +187,25 @@ STATUS_KEYS = {
     "ready": "st_ready",
     "cancelled": "st_cancelled",
 }
+
+
+def from_accept_language(header: str, default: str = "ms") -> str:
+    """First visit (no cookie): pick BM or English from the browser's language list."""
+    for part in (header or "").split(","):
+        code = part.split(";")[0].strip().lower()[:2]
+        if code in ("ms", "id"):
+            return "ms"
+        if code == "en":
+            return "en"
+    return default if default in LANGS else "ms"
+
+
+def safe_next(nxt: str | None) -> str:
+    """Only allow same-site relative redirects."""
+    nxt = nxt or "/"
+    if not nxt.startswith("/") or nxt.startswith("//") or "\\" in nxt:
+        return "/"
+    return nxt
 
 
 def t(lang: str, key: str) -> str:

@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Admin — {{ settings.app_name }}{% endblock %}
+{% block title %}Admin — {{ t('brand') }}{% endblock %}
 {% block content %}
 <div class="spread"><h1>Admin</h1>
   <div class="row">
     <a class="btn sm" href="/admin/events/new">+ Event</a>
     <a class="btn ghost sm" href="/admin/orders">Orders</a>
+    <a class="btn ghost sm" href="/admin/slides">Carousel</a>
     <a class="btn ghost sm" href="/admin/audit">Audit</a>
   </div>
 </div>
@@ -22,6 +23,8 @@
       <td style="white-space:nowrap">
         <a class="btn ghost sm" href="/admin/events/{{ e.id }}">Manage</a>
         <a class="btn ghost sm" href="/e/{{ e.slug }}" target="_blank">View</a>
+        <button type="button" class="btn ghost sm" data-copy="#link-{{ e.id }}">Copy link</button>
+        <input type="hidden" id="link-{{ e.id }}" value="{{ public_base }}/e/{{ e.slug }}">
       </td>
     </tr>
     {% endfor %}

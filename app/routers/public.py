@@ -1,6 +1,7 @@
 """Public pages: home, event gallery, media, language, terms, health."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Request
@@ -31,9 +32,40 @@ def healthz():
     return {"status": "ok"}
 
 
+@router.get("/qr/{name}")
+def qr_image(name: str):
+    """Payment QR uploaded by admin (stored under DATA_DIR/qr)."""
+    if not re.fullmatch(r"[A-Za-z0-9._-]+\.png", name) or ".." in name:
+        return Response(status_code=404)
+    path = settings.qr_dir / name
+    if not path.is_file():
+        return Response(status_code=404)
+    resp = FileResponse(path, media_type="image/png")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
+@router.get("/slides/{name}")
+def slide_image(name: str):
+    """Home-page carousel image uploaded by admin (DATA_DIR/slides)."""
+    if not re.fullmatch(r"slide-[0-9a-f]+\.webp", name):
+        return Response(status_code=404)
+    path = settings.slides_dir / name
+    if not path.is_file():
+        return Response(status_code=404)
+    resp = FileResponse(path, media_type="image/webp")
+    resp.headers["Cache-Control"] = "public, max-age=604800, immutable"
+    return resp
+
+
+@router.get("/help")
+def help_page(request: Request):
+    return render(request, "help.html", {})
+
+
 @router.get("/lang/{lang}")
 def set_lang(lang: str, request: Request):
-    nxt = request.query_params.get("next", "/")
+    nxt = i18n.safe_next(request.query_params.get("next", "/"))
     resp = RedirectResponse(nxt, status_code=303)
     if lang in i18n.LANGS:
         resp.set_cookie(LANG_COOKIE, lang, max_age=365 * 86400, samesite="lax")
@@ -45,7 +77,15 @@ def home(request: Request):
     with db() as conn:
         events = query(conn, "SELECT * FROM events ORDER BY created_at DESC")
         events = [e for e in events if _event_open(e)]
-    return render(request, "home.html", {"events": events})
+        slides = query(conn, "SELECT * FROM slides WHERE active=1 ORDER BY sort, id")
+        covers = {}
+        for e in events:
+            row = one(conn, """SELECT p.id FROM photos p JOIN classes c ON c.id=p.class_id
+                               WHERE p.event_id=? ORDER BY c.school, c.name, p.sort, p.filename
+                               LIMIT 1""", (e["id"],))
+            if row:
+                covers[e["id"]] = row["id"]
+    return render(request, "home.html", {"events": events, "slides": slides, "covers": covers})
 
 
 @router.get("/terms")

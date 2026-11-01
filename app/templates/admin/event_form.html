@@ -2,7 +2,7 @@
 {% block title %}New event — Admin{% endblock %}
 {% block content %}
 <h1>New event</h1>
-<form method="post" action="/admin/events/new" class="card stack">
+<form method="post" action="/admin/events/new" class="card stack" enctype="multipart/form-data">
   <div class="field"><label>Name</label><input name="name" required placeholder="Konvokesyen Tadika X 2026"></div>
   <div class="grid2">
     <div class="field"><label>Event date</label><input name="event_date" type="date"></div>
@@ -27,16 +27,39 @@
   </div>
   <div class="field"><label>Class folder delimiter ("SCHOOL - CLASS")</label>
     <input name="class_delimiter" value=" - "></div>
-  <div class="field"><label>Pickup location (school)</label><input name="pickup_location"></div>
-  <div class="grid2">
-    <div class="field"><label>Bank Muamalat account no.</label><input name="pay_bank_no"></div>
-    <div class="field"><label>QRPay image URL (optional)</label><input name="pay_qrpay_image" placeholder="/static/img/qrpay.png"></div>
-  </div>
-  <div class="grid2">
-    <div class="field"><label>Postage West (RM)</label><input name="postage_west" value="10"></div>
-    <div class="field"><label>Postage Sabah/Sarawak (RM)</label><input name="postage_east" value="18"></div>
-  </div>
+
+  <div class="field"><label>Bank Muamalat account no.</label><input name="pay_bank_no"></div>
+  {% set qr_current = '' %}
+  <div class="field"><label>QR bayaran (QRPay / DuitNow)</label>
+      <div class="qr-upload">
+        {% if qr_current %}<img id="qr-preview" src="{{ qr_current }}" alt="QR semasa">
+        {% else %}<div class="qr-empty" id="qr-empty">Tiada QR lagi</div><img id="qr-preview" class="hidden" alt="">{% endif %}
+        <div class="stack" style="gap:8px">
+          <label class="btn ghost sm file-btn" style="margin:0">
+            {% if qr_current %}Tukar gambar QR{% else %}Upload gambar QR{% endif %}
+            <input type="file" name="qr_file" id="qr-file" accept="image/png,image/jpeg,image/webp">
+          </label>
+          <span class="note" id="qr-name">PNG, JPG atau WebP · maks 8MB</span>
+          {% if qr_current %}<label class="row note" style="gap:6px;font-weight:500;margin:0"><input type="checkbox" name="qr_remove" value="1" style="width:auto"> Buang QR</label>{% endif %}
+        </div>
+      </div>
+      <input type="hidden" name="pay_qrpay_image" value="{{ qr_current }}">
+    </div>
+  {% set ev_pick, ev_post, ev_loc, ev_west, ev_east = 1, 0, '', '10', '18' %}
+  {% include "admin/_delivery.html" %}
   <button class="btn" type="submit">Create</button>
 </form>
 {% endblock %}
-{% block scripts %}<script src="/static/js/ncbrowse.js" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/js/ncbrowse.js" defer></script>
+<script>
+(function(){
+  var f=document.getElementById('qr-file'); if(!f) return;
+  f.addEventListener('change',function(){
+    var file=f.files&&f.files[0]; if(!file) return;
+    document.getElementById('qr-name').textContent=file.name;
+    var img=document.getElementById('qr-preview'), empty=document.getElementById('qr-empty');
+    img.src=URL.createObjectURL(file); img.classList.remove('hidden'); if(empty) empty.classList.add('hidden');
+  });
+})();
+</script>
+{% endblock %}

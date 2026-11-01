@@ -22,6 +22,25 @@
     window.__toastT = setTimeout(function () { t.classList.remove('show'); }, 2600);
   };
 
+  // Checkbox that shows/hides a related box (admin delivery options).
+  document.querySelectorAll('input[data-toggle]').forEach(function (cb) {
+    var box = document.querySelector(cb.dataset.toggle);
+    if (!box) return;
+    cb.addEventListener('change', function () { box.classList.toggle('hidden', !cb.checked); });
+  });
+
+  // "Copy link" buttons.
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var src = document.querySelector(btn.dataset.copy);
+      if (!src) return;
+      var text = src.value || src.textContent;
+      var done = function () { var o = btn.textContent; btn.textContent = '✓'; setTimeout(function () { btn.textContent = o; }, 1500); };
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () { src.select(); document.execCommand('copy'); done(); });
+      else { src.select(); document.execCommand('copy'); done(); }
+    });
+  });
+
   window.setCartBadge = function (n) {
     var b = document.getElementById('cart-badge');
     if (!b) return;

@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS events (
     pay_bank_no     TEXT NOT NULL DEFAULT '',
     postage_west_sen INTEGER NOT NULL DEFAULT 1000,
     postage_east_sen INTEGER NOT NULL DEFAULT 1800,
+    allow_pickup    INTEGER NOT NULL DEFAULT 1,     -- customer may collect
+    allow_post      INTEGER NOT NULL DEFAULT 0,     -- customer may choose postage
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -80,7 +82,7 @@ CREATE TABLE IF NOT EXISTS customers (
 
 CREATE TABLE IF NOT EXISTS login_codes (
     email       TEXT PRIMARY KEY,
-    code        TEXT NOT NULL,            -- "21 88"
+    code        TEXT NOT NULL,            -- "2188" (old rows may be "21 88")
     expires_at  TEXT NOT NULL,
     sent_at     TEXT NOT NULL,
     attempts    INTEGER NOT NULL DEFAULT 0,
@@ -154,6 +156,15 @@ CREATE TABLE IF NOT EXISTS print_sessions (
     started_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS slides (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    file       TEXT NOT NULL,             -- name under DATA_DIR/slides
+    caption    TEXT NOT NULL DEFAULT '',
+    sort       INTEGER NOT NULL DEFAULT 0,
+    active     INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     ts        TEXT NOT NULL DEFAULT (datetime('now')),
@@ -203,6 +214,10 @@ def init_db() -> None:
         # lightweight migrations for existing databases
         for stmt in (
             "ALTER TABLE events ADD COLUMN nextcloud_id TEXT NOT NULL DEFAULT ''",
+            # existing events keep both delivery options (their old behaviour);
+            # new events are created pickup-only from the admin form.
+            "ALTER TABLE events ADD COLUMN allow_pickup INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE events ADD COLUMN allow_post INTEGER NOT NULL DEFAULT 1",
         ):
             try:
                 conn.execute(stmt)
