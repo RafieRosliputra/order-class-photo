@@ -9,22 +9,32 @@
 <form method="post" action="/checkout" class="stack">
   {% set can_pick = event.allow_pickup or not event.allow_post %}
   {% set can_post = event.allow_post %}
+  {% set points = pickup_list(event.pickup_location) %}
+  {% set want_post = can_post and (sel_delivery == 'post' or not can_pick) %}
   {% if can_pick and not can_post %}
-  {# pickup only: nothing to choose #}
+  {# pickup only: no delivery choice; pick a point only when there are several #}
   <input type="hidden" name="delivery" value="pickup">
-  {% if event.pickup_location %}
-  <div class="card"><span class="muted">{{ t('pickup') }}:</span> <strong>{{ event.pickup_location }}</strong></div>
+  {% if points|length == 1 %}
+  <div class="card"><span class="muted">{{ t('pickup') }}:</span> <strong>{{ points[0] }}</strong></div>
+  {% elif points|length > 1 %}
+  <div class="card stack">
+    <h2>{{ t('pickup_choose') }}</h2>
+    {% include "_pickup_points.html" %}
+  </div>
   {% endif %}
   {% else %}
   <div class="card stack">
     <h2>{{ t('delivery') }}</h2>
     {% if can_pick %}
     <label class="row" style="gap:10px">
-      <input type="radio" name="delivery" value="pickup" checked style="width:auto" onchange="togglePost(false)">
-      <span>{{ t('pickup') }}{% if event.pickup_location %} — {{ event.pickup_location }}{% endif %} <span class="muted">(RM0.00)</span></span>
+      <input type="radio" name="delivery" value="pickup" {{ '' if want_post else 'checked' }} style="width:auto" onchange="togglePost(false)">
+      <span>{{ t('pickup') }}{% if points|length == 1 %} — {{ points[0] }}{% endif %} <span class="muted">(RM0.00)</span></span>
     </label>
+    {% if points|length > 1 %}
+    <div id="pickbox" class="{{ 'hidden ' if want_post }}stack" style="margin-left:28px">{% include "_pickup_points.html" %}</div>
+    {% endif %}
     <label class="row" style="gap:10px">
-      <input type="radio" name="delivery" value="post" style="width:auto" onchange="togglePost(true)">
+      <input type="radio" name="delivery" value="post" {{ 'checked' if want_post }} style="width:auto" onchange="togglePost(true)">
       <span>{{ t('post') }}</span>
     </label>
     {% else %}
@@ -32,7 +42,7 @@
     <p class="note" style="margin:0">{{ t('post_only_note') }}</p>
     {% endif %}
 
-    <div id="postbox" class="{{ 'hidden ' if can_pick }}stack">
+    <div id="postbox" class="{{ '' if want_post else 'hidden ' }}stack">
       <div>
         <label>{{ t('postage') }}</label>
         <label class="row" style="gap:8px"><input type="radio" name="zone" value="west" checked style="width:auto"> {% if lang=='ms' %}Semenanjung{% else %}Peninsular{% endif %} — {{ rm(event.postage_west_sen) }}</label>
@@ -92,11 +102,12 @@ function updatePost(){
 }
 function togglePost(on){
   document.getElementById('postbox').classList.toggle('hidden',!on);
+  var pb=document.getElementById('pickbox'); if(pb) pb.classList.toggle('hidden',on);
   updatePost();
   if(on && !map){ initMap(); }
 }
 document.querySelectorAll('input[name=zone]').forEach(function(r){r.addEventListener('change',updatePost);});
-{% if event.allow_post and not event.allow_pickup %}togglePost(true);{% endif %}
+{% if event.allow_post and (not event.allow_pickup or sel_delivery == 'post') %}togglePost(true);{% endif %}
 function initMap(){
   map=L.map('map').setView([1.6600,103.6000],11); // Johor default
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);

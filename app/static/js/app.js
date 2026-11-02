@@ -46,5 +46,37 @@
     if (!b) return;
     b.textContent = n;
     b.classList.toggle('hidden', !n);
+    b.classList.remove('bump'); void b.offsetWidth; b.classList.add('bump');
   };
+
+  // Tap any [data-zoom] thumbnail (cart, order) to see the photo large.
+  var zoomBox = null;
+  function openZoom(url, label) {
+    if (!zoomBox) {
+      zoomBox = document.createElement('div');
+      zoomBox.className = 'lightbox';
+      zoomBox.setAttribute('role', 'dialog');
+      zoomBox.setAttribute('aria-modal', 'true');
+      zoomBox.innerHTML = '<button class="close" type="button" aria-label="×">×</button>' +
+        '<img class="zimg" alt="" draggable="false">';
+      document.body.appendChild(zoomBox);
+      zoomBox.addEventListener('click', function (e) {
+        if (e.target.classList.contains('zimg')) return;
+        zoomBox.classList.remove('show');
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') zoomBox.classList.remove('show');
+      });
+    }
+    var img = zoomBox.querySelector('.zimg');
+    img.src = url; img.alt = label || '';
+    zoomBox.classList.add('show');
+    zoomBox.querySelector('.close').focus();
+  }
+  document.addEventListener('click', function (e) {
+    var z = e.target.closest('[data-zoom]');
+    if (!z) return;
+    e.preventDefault();
+    openZoom(z.dataset.zoom, z.getAttribute('aria-label'));
+  });
 })();

@@ -14,7 +14,7 @@ from . import i18n
 from .config import settings
 from .database import db, one
 from .security import SESSION_COOKIE, read_session
-from .utils import gmaps_link, rm, whatsapp_link
+from .utils import gmaps_link, pickup_list, rm, whatsapp_link
 
 CART_COOKIE = "js_cart"
 LANG_COOKIE = "js_lang"
@@ -103,6 +103,7 @@ def render(request: Request, name: str, ctx: dict | None = None):
         "customer": customer,
         "cart_count": cart_count(cart),
         "whatsapp_link": whatsapp_link,
+        "pickup_list": pickup_list,
         "gmaps_link": gmaps_link,
         "umami_src": settings.umami_src,
         "umami_id": settings.umami_website_id,

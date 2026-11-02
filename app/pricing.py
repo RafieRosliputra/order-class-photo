@@ -36,13 +36,28 @@ def compute_order_totals(conn, order_id: int) -> dict:
     return {"subtotal_sen": subtotal, "postage_sen": postage, "total_sen": total}
 
 
+def parse_cart_key(key: str) -> tuple[int, int, int] | None:
+    """Cart keys are 'event_id:photo_id:size_id'; size_id 0 = size not chosen yet."""
+    parts = key.split(":")
+    if len(parts) != 3:
+        return None
+    try:
+        return int(parts[0]), int(parts[1]), int(parts[2])
+    except ValueError:
+        return None
+
+
+def cart_unsized(cart: dict) -> int:
+    """How many cart photos still have no print size."""
+    return sum(1 for k in cart if (p := parse_cart_key(k)) and p[2] == 0)
+
+
 def cart_subtotal(conn, cart: dict) -> int:
-    """cart = {"photo_id:size_id": qty}. Returns sen."""
+    """Sum of sized cart lines, in sen (lines without a size count as 0)."""
     total = 0
     for key, qty in cart.items():
-        try:
-            _, size_id = key.split(":")
-        except ValueError:
+        parsed = parse_cart_key(key)
+        if not parsed or parsed[2] == 0:
             continue
-        total += size_price(conn, int(size_id)) * int(qty)
+        total += size_price(conn, parsed[2]) * int(qty)
     return total

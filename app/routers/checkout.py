@@ -10,7 +10,8 @@ from fastapi.responses import RedirectResponse
 from ..database import db, one, query
 from ..deps import (cart_event_id, current_customer, read_cart, render, write_cart)
 from ..orders_service import create_order_from_cart
-from ..pricing import cart_subtotal
+from ..pricing import cart_subtotal, cart_unsized
+from ..utils import pickup_list
 
 router = APIRouter()
 
@@ -32,6 +33,8 @@ def checkout_page(request: Request):
     event_id = cart_event_id(cart)
     if not event_id:
         return RedirectResponse("/cart", status_code=303)
+    if cart_unsized(cart):
+        return RedirectResponse("/cart?need_size=1", status_code=303)
     customer = current_customer(request)
     if not customer:
         return RedirectResponse("/login?next=/checkout", status_code=303)
@@ -58,11 +61,14 @@ def checkout_submit(
     name: str = Form(""),
     phone: str = Form(""),
     category: str = Form(""),
+    pickup_point: str = Form(""),
 ):
     cart = read_cart(request)
     event_id = cart_event_id(cart)
     if not event_id or not cart:
         return RedirectResponse("/cart", status_code=303)
+    if cart_unsized(cart):
+        return RedirectResponse("/cart?need_size=1", status_code=303)
     customer = current_customer(request)
     if not customer:
         return RedirectResponse("/login?next=/checkout", status_code=303)
@@ -70,12 +76,24 @@ def checkout_submit(
     with db() as conn:
         event = one(conn, "SELECT * FROM events WHERE id=?", (event_id,))
     delivery = allowed_delivery(event, delivery)
+    points = pickup_list(event["pickup_location"]) if event else []
+    chosen_point = ""
+    error = ""
+    if delivery == "pickup" and points:
+        if len(points) == 1:
+            chosen_point = points[0]
+        elif pickup_point in points:
+            chosen_point = pickup_point
+        else:
+            error = "pickup_required"
     if delivery == "post" and not address.strip():
+        error = "address_required"
+    if error:
         with db() as conn:
             subtotal = cart_subtotal(conn, cart)
         return render(request, "checkout.html", {
             "event": event, "subtotal_sen": subtotal, "customer": customer,
-            "error": "address_required", "schools": [],
+            "error": error, "schools": [], "sel_delivery": delivery,
         })
 
     phone = phone.strip()
@@ -99,6 +117,7 @@ def checkout_submit(
             delivery=delivery, address=address.strip(), lat=latf, lng=lngf,
             zone=("east" if zone == "east" else "west"),
             category=category.strip(), phone=phone or customer["phone"],
+            pickup_location=chosen_point,
         )
         order = one(conn, "SELECT order_no FROM orders WHERE id=?", (order_id,))
 

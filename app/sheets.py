@@ -67,6 +67,8 @@ def append_order(conn, order_id: int, session_row) -> None:
     cust = one(conn, "SELECT * FROM customers WHERE id=?", (order["customer_id"],))
     items = query(conn, "SELECT * FROM order_items WHERE order_id=?", (order_id,))
     delivery = "Pos" if order["delivery_method"] == "post" else "Pickup"
+    if order["delivery_method"] != "post" and order["pickup_location"]:
+        delivery = f"Pickup: {order['pickup_location']}"
     rows = [[
         order["order_no"], order["created_at"], cust["name"], order["phone_used"] or cust["phone"],
         it["school"], it["class_name"], it["filename"], it["size_code"], it["qty"],

@@ -17,14 +17,15 @@ log = logging.getLogger("orders")
 
 # --- order creation --------------------------------------------------------
 def create_order_from_cart(conn, event_id, customer_id, cart, *, delivery, address,
-                           lat, lng, zone, category, phone) -> int:
+                           lat, lng, zone, category, phone, pickup_location="") -> int:
     order_no = next_order_no(conn)
     postage = postage_for(conn, event_id, delivery, zone)
     order_id = conn.execute(
         """INSERT INTO orders(order_no, event_id, customer_id, status, delivery_method,
-               postage_sen, address, lat, lng, category, phone_used)
-           VALUES (?,?,?,'awaiting_payment',?,?,?,?,?,?,?)""",
-        (order_no, event_id, customer_id, delivery, postage, address, lat, lng, category, phone),
+               postage_sen, address, lat, lng, category, phone_used, pickup_location)
+           VALUES (?,?,?,'awaiting_payment',?,?,?,?,?,?,?,?)""",
+        (order_no, event_id, customer_id, delivery, postage, address, lat, lng, category, phone,
+         pickup_location if delivery == "pickup" else ""),
     ).lastrowid
 
     for key, qty in cart.items():

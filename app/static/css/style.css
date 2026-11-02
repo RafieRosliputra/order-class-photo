@@ -248,3 +248,56 @@ th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);verti
 .slide-row{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
 .slide-row img{width:200px;aspect-ratio:16/9;object-fit:cover;border-radius:var(--radius);background:var(--mist)}
 .slide-row.off img{opacity:.4}
+
+/* cart / order lines */
+.line{transition:background-color .5s ease}
+.line .thumb{border:0;padding:0;cursor:zoom-in;font:inherit}
+.line-body{flex:1;min-width:0}
+.line-name{font-weight:600;overflow-wrap:anywhere}
+.line-foot{margin-top:8px}
+.line-price{font-weight:700;white-space:nowrap}
+.line .pills{margin:8px 0 0}
+.line .pills form{display:inline}
+.pill small{display:block;font-size:11px;font-weight:500;line-height:1.1;opacity:.75}
+.pill{transition:transform .12s ease,background-color .15s,color .15s}
+.pill.pressed,.qty button.pressed{transform:scale(.92)}
+.qty button:disabled{opacity:.3;cursor:default}
+.need{color:var(--warn);font-weight:600}
+.line.unsized .thumb{outline:2px dashed var(--teal);outline-offset:2px}
+.more-size{margin-top:8px}
+.more-size summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--teal-ink);list-style:none}
+.more-size summary::-webkit-details-marker{display:none}
+.iconbtn{all:unset;box-sizing:border-box;width:40px;height:40px;border-radius:var(--radius);display:flex;align-items:center;
+  justify-content:center;color:var(--steel);cursor:pointer;flex:none}
+.iconbtn:hover{background:#fdecea;color:var(--err)}
+.iconbtn:focus-visible{outline:3px solid var(--teal-ink)}
+.line.leaving{overflow:hidden;opacity:0;transform:translateX(24px);padding-top:0;padding-bottom:0;
+  transition:height .26s ease,opacity .2s ease,transform .26s ease,padding .26s ease}
+.line.busy{opacity:.6}
+.line.flash{background:var(--teal-soft)}
+@keyframes lineIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.line.flash .line-body{animation:lineIn .35s ease}
+
+/* add-to-cart flight + badge bump */
+.flyer{position:fixed;z-index:90;border-radius:var(--radius);background:center/cover no-repeat;pointer-events:none;
+  box-shadow:0 8px 24px rgba(32,39,43,.25);transition:transform .65s cubic-bezier(.5,-.2,.7,1),opacity .65s ease}
+@keyframes bump{0%{transform:scale(1)}35%{transform:scale(1.45)}70%{transform:scale(.9)}100%{transform:scale(1)}}
+.badge.bump{animation:bump .45s ease}
+
+/* zoom any thumbnail */
+.lightbox .zimg{max-width:100%;max-height:calc(100vh - 80px);object-fit:contain;border-radius:4px;user-select:none;-webkit-user-drag:none}
+
+/* payment QR: picture centred, text left */
+.qr-box{display:flex;flex-direction:column;align-items:center;gap:10px;margin:12px 0 8px;text-align:center}
+.qr-img{display:block;cursor:pointer}
+.qr-img img{width:min(240px,70vw);height:auto;display:block;border:1px solid var(--line);border-radius:var(--radius);background:#fff;padding:8px}
+.qr-steps{margin:6px 0 0;padding-left:20px;text-align:left;font-size:14px;display:grid;gap:4px}
+.pay-method{text-align:left}
+
+/* pickup points */
+.pickpoints{display:grid;gap:8px}
+.pickpoint{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:#fff;cursor:pointer;margin:0}
+.pickpoint:has(input:checked){border-color:var(--teal-ink);background:var(--teal-soft)}
+
+@media (prefers-reduced-motion: reduce){.flyer{display:none}.badge.bump,.line.flash .line-body{animation:none}}
+.line{align-items:flex-start}

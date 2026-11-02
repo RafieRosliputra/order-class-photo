@@ -14,7 +14,7 @@ from ..config import settings
 from ..database import audit, db, one, query
 from ..deps import render
 from ..pricing import compute_order_totals
-from ..utils import rm, slugify, split_school_class, to_sen, unique_slug
+from ..utils import clean_pickup_text, rm, slugify, split_school_class, to_sen, unique_slug
 
 log = logging.getLogger("admin")
 router = APIRouter(prefix="/admin")
@@ -74,6 +74,7 @@ async def event_create(request: Request, name: str = Form(...), event_date: str 
                  postage_west: str = Form("10"), postage_east: str = Form("18"),
                  allow_pickup: str = Form(""), allow_post: str = Form("")):
     pick, post = _delivery_flags(allow_pickup, allow_post)
+    pickup_location = clean_pickup_text(pickup_location)
     with db() as conn:
         slug = unique_slug(conn, name)
         eid = conn.execute(
@@ -141,6 +142,7 @@ async def event_edit(event_id: int, request: Request, name: str = Form(...), eve
                qr_remove: str = Form(""), allow_pickup: str = Form(""),
                allow_post: str = Form("")):
     pick, post = _delivery_flags(allow_pickup, allow_post)
+    pickup_location = clean_pickup_text(pickup_location)
     qr_error = False
     try:
         qr_url = await _qr_from_upload(qr_file, event_id)

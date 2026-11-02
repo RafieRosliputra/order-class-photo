@@ -48,11 +48,40 @@
         var key = 'err' + d.error.replace(/(^|_)([a-z])/g, function (m, a, c) { return c.toUpperCase(); });
         jsToast('⚠ ' + (grid.dataset[key] || grid.dataset.errGeneric || d.error)); return;
       }
-      window.setCartBadge(d.count);
-      jsToast(selected.size + ' ' + (grid.dataset.addedLabel || 'added'));
+      flyToCart(Array.from(selected));
+      setTimeout(function () { window.setCartBadge(d.count); }, flyMs);
+      if (d.added === 0) jsToast(grid.dataset.inCartLabel || '✓');
+      else jsToast((d.added != null ? d.added : selected.size) + ' ' + (grid.dataset.addedLabel || 'added'));
       clearBtn && clearBtn.click();
     }).catch(function () { addBtn.disabled = false; jsToast('⚠ ' + (grid.dataset.errGeneric || '')); });
   });
+
+  // "Add to cart": the chosen photos fly up to the cart icon.
+  var flyMs = 650;
+  function flyToCart(ids) {
+    var target = document.querySelector('.iconlink');
+    if (!target || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) { flyMs = 0; return; }
+    var t = target.getBoundingClientRect();
+    ids.slice(0, 6).forEach(function (id, n) {
+      var cell = grid.querySelector('.cell[data-id="' + id + '"]');
+      if (!cell) return;
+      var r = cell.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > window.innerHeight) return; // off screen
+      var f = document.createElement('div');
+      f.className = 'flyer';
+      f.style.backgroundImage = cell.style.backgroundImage;
+      f.style.left = r.left + 'px'; f.style.top = r.top + 'px';
+      f.style.width = r.width + 'px'; f.style.height = r.height + 'px';
+      document.body.appendChild(f);
+      var dx = (t.left + t.width / 2) - (r.left + r.width / 2);
+      var dy = (t.top + t.height / 2) - (r.top + r.height / 2);
+      setTimeout(function () {
+        f.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(.12)';
+        f.style.opacity = '.3';
+      }, 20 + n * 60);
+      setTimeout(function () { f.remove(); }, flyMs + 120 + n * 60);
+    });
+  }
 
   // filters
   var fSchool = document.getElementById('f-school');

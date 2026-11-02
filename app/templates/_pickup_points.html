@@ -1,0 +1,7 @@
+{# Pickup point radios. Needs `points`, `error`. #}
+<div class="pickpoints" role="radiogroup" aria-label="{{ t('pickup_choose') }}">
+  {% for p in points %}
+  <label class="pickpoint"><input type="radio" name="pickup_point" value="{{ p }}" style="width:auto"> <span>{{ p }}</span></label>
+  {% endfor %}
+</div>
+{% if error == 'pickup_required' %}<p class="error" style="margin:0">{{ t('pickup_required') }}</p>{% endif %}

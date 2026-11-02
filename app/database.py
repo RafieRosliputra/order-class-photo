@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS orders (
     lng           REAL,
     category      TEXT NOT NULL DEFAULT '',
     phone_used    TEXT NOT NULL DEFAULT '',
+    pickup_location TEXT NOT NULL DEFAULT '',  -- pickup point the customer chose
     subtotal_sen  INTEGER NOT NULL DEFAULT 0,
     total_sen     INTEGER NOT NULL DEFAULT 0,
     paid_sen      INTEGER NOT NULL DEFAULT 0,  -- sum of accepted receipts
@@ -218,6 +219,7 @@ def init_db() -> None:
             # new events are created pickup-only from the admin form.
             "ALTER TABLE events ADD COLUMN allow_pickup INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE events ADD COLUMN allow_post INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE orders ADD COLUMN pickup_location TEXT NOT NULL DEFAULT ''",
         ):
             try:
                 conn.execute(stmt)

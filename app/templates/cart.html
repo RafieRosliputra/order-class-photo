@@ -7,35 +7,67 @@
   <div class="card"><p class="muted">{{ t('cart_empty') }}</p>
   <a class="btn ghost" href="/">{{ t('choose_photos') }}</a></div>
 {% else %}
-<div class="card">
+{% if request.query_params.get('need_size') and unsized %}
+<p class="error" style="margin:0 0 12px">{{ t('need_size_err') }}</p>
+{% endif %}
+
+<div class="card" id="cart-lines">
   {% for it in items %}
-  <div class="line">
-    <div class="thumb" style="background-image:url('/p/{{ it.photo.id }}/thumb.webp')"></div>
-    <div style="flex:1">
-      <div style="font-weight:700">{{ it.photo.filename }}</div>
-      <div class="pills" style="margin:8px 0">
+  <div class="line{{ ' unsized' if not it.size }}" data-pid="{{ it.photo.id }}" data-key="{{ it.key }}">
+    <button type="button" class="thumb zoomable" data-zoom="/p/{{ it.photo.id }}/large.webp"
+            style="background-image:url('/p/{{ it.photo.id }}/thumb.webp')" aria-label="{{ t('view_photo') }} {{ it.photo.filename }}"></button>
+    <div class="line-body">
+      <div class="line-name">{{ it.photo.filename }}</div>
+
+      {% if not it.size %}
+      <div class="note need">{{ t('pick_size') }}</div>
+      {% endif %}
+      <div class="pills" role="group" aria-label="{{ t('size') }}">
         {% for s in sizes %}
-        <form method="post" action="/cart/change-size" style="display:inline">
+        <form method="post" action="/cart/change-size" class="js-anim">
           <input type="hidden" name="key" value="{{ it.key }}">
           <input type="hidden" name="size_id" value="{{ s.id }}">
-          <button class="pill {{ 'on' if s.id==it.size.id else '' }}" type="submit" title="{{ rm(s.price_sen) }}">{{ s.code }}</button>
+          <button class="pill{{ ' on' if it.size and s.id==it.size.id }}" type="submit">
+            {{ s.code }}{% if not it.size %}<small>{{ rm(s.price_sen) }}</small>{% endif %}
+          </button>
         </form>
         {% endfor %}
       </div>
-      <div class="spread">
-        <form method="post" action="/cart/update" class="qty">
+
+      {% if it.size %}
+      <div class="spread line-foot">
+        <form method="post" action="/cart/update" class="qty js-anim">
           <input type="hidden" name="key" value="{{ it.key }}">
-          <button type="submit" name="qty" value="{{ it.qty-1 }}" aria-label="-">−</button>
+          <button type="submit" name="qty" value="{{ it.qty-1 }}" aria-label="−" {{ 'disabled' if it.qty <= 1 }}>−</button>
           <span>{{ it.qty }}</span>
           <button type="submit" name="qty" value="{{ it.qty+1 }}" aria-label="+">+</button>
         </form>
-        <div style="font-weight:700">{{ rm(it.line_sen) }}</div>
+        <div class="line-price">{{ rm(it.line_sen) }}</div>
       </div>
-      <div class="note">{{ it.size.code }} · {{ rm(it.size.price_sen) }} / {% if lang=='ms' %}keping{% else %}print{% endif %}</div>
+      <div class="note">{{ it.size.code }} · {{ rm(it.size.price_sen) }} / {{ t('per_print') }}</div>
+      {% if sizes|length > 1 %}
+      <details class="more-size">
+        <summary>+ {{ t('add_other_size') }}</summary>
+        <div class="pills">
+          {% for s in sizes if s.id != it.size.id %}
+          <form method="post" action="/cart/add-size" class="js-anim">
+            <input type="hidden" name="event_id" value="{{ event.id }}">
+            <input type="hidden" name="photo_id" value="{{ it.photo.id }}">
+            <input type="hidden" name="size_id" value="{{ s.id }}">
+            <button class="pill" type="submit">+ {{ s.code }} <small>{{ rm(s.price_sen) }}</small></button>
+          </form>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+      {% endif %}
     </div>
-    <form method="post" action="/cart/update">
+    <form method="post" action="/cart/update" class="js-remove">
       <input type="hidden" name="key" value="{{ it.key }}">
-      <button class="btn ghost sm" type="submit" name="qty" value="0">{{ t('remove') }}</button>
+      <input type="hidden" name="qty" value="0">
+      <button class="iconbtn" type="submit" aria-label="{{ t('remove') }}" title="{{ t('remove') }}">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+      </button>
     </form>
   </div>
   {% endfor %}
@@ -44,9 +76,17 @@
 </div>
 
 <div class="card" style="margin-top:14px">
+  {% if sized_count %}
   <div class="spread"><span class="muted">{{ t('subtotal') }}</span><strong>{{ rm(subtotal_sen) }}</strong></div>
-  <div class="note" style="margin:6px 0">{% if lang=='ms' %}Caj pos (jika pos) dikira semasa pembayaran.{% else %}Postage (if posted) is added at checkout.{% endif %}</div>
-  <a class="btn block" href="/checkout">{{ t('checkout') }}</a>
+  {% if event.allow_post %}<div class="note" style="margin:6px 0">{% if lang=='ms' %}Caj pos (jika pos) dikira semasa pembayaran.{% else %}Postage (if posted) is added at checkout.{% endif %}</div>{% endif %}
+  {% endif %}
+  {% if unsized %}
+  <p class="note need" style="margin:0 0 10px">{{ t('unsized_left')|replace('{n}', unsized) }}</p>
+  <button class="btn block" type="button" disabled>{{ t('checkout') }}</button>
+  {% else %}
+  <a class="btn block" href="/checkout" style="margin-top:10px">{{ t('checkout') }}</a>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}
+{% block scripts %}<script src="/static/js/cart.js?v=20261102c" defer></script>{% endblock %}

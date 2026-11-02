@@ -33,17 +33,25 @@
   {% if overpaid %}<p class="error">{{ t('overpaid_note') }}</p>{% endif %}
 
   <div class="pay-method">
-    <strong>{{ t('pay_qrpay') }} — DuitNow QR</strong>
-    {% if duitnow_on %}
-      <div style="margin-top:8px;text-align:center">
-        <img src="/order/{{ order.order_no }}/qr.png" alt="DuitNow QR {{ rm(order.total_sen) }}" style="max-width:240px;border:1px solid var(--line);border-radius:12px">
-        <div class="note" style="margin-top:6px">{% if lang=='ms' %}Imbas — amaun {{ rm(order.total_sen) }} &amp; rujukan sudah termasuk.{% else %}Scan — amount {{ rm(order.total_sen) }} &amp; reference are already included.{% endif %}</div>
-      </div>
-    {% else %}
-      {% set qr = event.pay_qrpay_image or settings.pay_qrpay_image %}
-      {% if qr %}<div style="margin-top:8px"><img src="{{ qr }}" alt="QRPay" style="max-width:220px"></div>{% endif %}
-      <p class="note">{% if lang=='ms' %}Imbas QRPay {{ settings.pay_qrpay_bank }} dan masukkan jumlah di atas.{% else %}Scan {{ settings.pay_qrpay_bank }} QRPay and key in the amount above.{% endif %}</p>
+    <strong>{{ t('pay_qrpay') }}{% if duitnow_on %} — DuitNow QR{% endif %}</strong>
+    {% if duitnow_on %}{% set qr = '/order/' ~ order.order_no ~ '/qr.png' %}{% else %}{% set qr = event.pay_qrpay_image or settings.pay_qrpay_image %}{% endif %}
+    {% if qr %}
+    <div class="qr-box">
+      <a href="{{ qr }}" download="QR-JohorStudio-{{ order.order_no }}.png" class="qr-img" aria-label="{{ t('qr_save') }}">
+        <img src="{{ qr }}" alt="QR {{ rm(order.total_sen) }}">
+      </a>
+      <a class="btn sand sm" href="{{ qr }}" download="QR-JohorStudio-{{ order.order_no }}.png">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>
+        {{ t('qr_save') }}
+      </a>
+    </div>
     {% endif %}
+    <ol class="qr-steps">
+      <li>{{ t('qr_step1') }}</li>
+      <li>{{ t('qr_step2') }}</li>
+      <li>{% if duitnow_on %}{{ t('qr_step3_dn')|replace('{amt}', rm(order.total_sen)) }}{% else %}{{ t('qr_step3')|replace('{amt}', rm(balance_sen if order.paid_sen else order.total_sen)) }}{% endif %}</li>
+    </ol>
+    <p class="note" style="margin:6px 0 0">{{ t('qr_other_phone') }}</p>
   </div>
   <div class="pay-method">
     <strong>{{ t('pay_transfer') }} — {{ settings.pay_bank_name }}</strong>
@@ -56,19 +64,57 @@
     <input id="files" name="files" type="file" accept="image/png,image/jpeg,application/pdf" multiple required>
     <span class="note">{{ t('receipt_hint') }}</span>
     <button class="btn block" type="submit">{{ t('upload_receipt') }}</button>
+    <span class="note">{{ t('receipt_submit_note') }}</span>
   </form>
 </div>
 {% endif %}
 
 <!-- items -->
-<div class="card">
-  <h2>{% if lang=='ms' %}Pesanan{% else %}Items{% endif %}</h2>
+<div class="card" id="items">
+  <div class="spread"><h2 style="margin:0">{% if lang=='ms' %}Pesanan{% else %}Items{% endif %}</h2>
+    {% if editable %}<span class="tag">{{ t('editable_tag') }}</span>{% endif %}</div>
+  {% if request.query_params.get('locked') %}<p class="error">{{ t('order_locked') }}</p>{% endif %}
+  {% if request.query_params.get('last_item') %}<p class="error">{{ t('order_last_item') }}</p>{% endif %}
+  {% if editable %}<p class="note" style="margin:6px 0 0">{{ t('edit_hint') }}</p>{% endif %}
   {% for it in items %}
-  <div class="line">
-    <div class="thumb" style="background-image:url('/p/{{ it.photo_id }}/thumb.webp')"></div>
-    <div style="flex:1"><div style="font-weight:700">{{ it.filename }}</div>
-      <div class="note">{{ it.size_code }} × {{ it.qty }}{% if it.class_name %} · {{ it.class_name }}{% endif %}</div></div>
-    <div style="font-weight:700">{{ rm(it.qty * it.unit_price_sen) }}</div>
+  <div class="line" data-pid="{{ it.photo_id }}" data-key="{{ it.id }}">
+    <button type="button" class="thumb zoomable" data-zoom="/p/{{ it.photo_id }}/large.webp"
+            style="background-image:url('/p/{{ it.photo_id }}/thumb.webp')" aria-label="{{ t('view_photo') }} {{ it.filename }}"></button>
+    <div class="line-body">
+      <div class="line-name">{{ it.filename }}</div>
+      {% if editable %}
+      <div class="pills" role="group" aria-label="{{ t('size') }}">
+        {% for s in sizes %}
+        <form method="post" action="/order/{{ order.order_no }}/items/{{ it.id }}/size" class="js-anim">
+          <input type="hidden" name="size_id" value="{{ s.id }}">
+          <button class="pill{{ ' on' if s.id==it.size_id }}" type="submit">{{ s.code }}</button>
+        </form>
+        {% endfor %}
+      </div>
+      <div class="spread line-foot">
+        <form method="post" action="/order/{{ order.order_no }}/items/{{ it.id }}/qty" class="qty js-anim">
+          <button type="submit" name="qty" value="{{ it.qty-1 }}" aria-label="−" {{ 'disabled' if it.qty <= 1 }}>−</button>
+          <span>{{ it.qty }}</span>
+          <button type="submit" name="qty" value="{{ it.qty+1 }}" aria-label="+">+</button>
+        </form>
+        <div class="line-price">{{ rm(it.qty * it.unit_price_sen) }}</div>
+      </div>
+      <div class="note">{{ it.size_code }} · {{ rm(it.unit_price_sen) }} / {{ t('per_print') }}{% if it.class_name %} · {{ it.class_name }}{% endif %}</div>
+      {% else %}
+      <div class="note">{{ it.size_code }} × {{ it.qty }}{% if it.class_name %} · {{ it.class_name }}{% endif %}</div>
+      {% endif %}
+    </div>
+    {% if editable %}
+      {% if items|length > 1 %}
+      <form method="post" action="/order/{{ order.order_no }}/items/{{ it.id }}/remove" class="js-remove">
+        <button class="iconbtn" type="submit" aria-label="{{ t('remove') }}" title="{{ t('remove') }}">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+        </button>
+      </form>
+      {% endif %}
+    {% else %}
+    <div class="line-price">{{ rm(it.qty * it.unit_price_sen) }}</div>
+    {% endif %}
   </div>
   {% endfor %}
   <div class="spread" style="margin-top:12px"><span class="muted">{{ t('subtotal') }}</span><span>{{ rm(order.subtotal_sen) }}</span></div>
@@ -84,7 +130,8 @@
     {% set g = gmaps_link(order.lat, order.lng, order.address) %}
     {% if g %}<a class="btn ghost sm" href="{{ g }}" target="_blank" rel="noopener">📍 {{ t('open_in_maps') }}</a>{% endif %}
   {% else %}
-    <p>{{ t('pickup') }}{% if event.pickup_location %} — {{ event.pickup_location }}{% endif %}</p>
+    {% set pts = pickup_list(event.pickup_location) %}
+    <p>{{ t('pickup') }}{% if order.pickup_location %} — <strong>{{ order.pickup_location }}</strong>{% elif pts|length == 1 %} — {{ pts[0] }}{% endif %}</p>
   {% endif %}
 </div>
 
@@ -107,4 +154,4 @@
 {% set help_href = wa %}
 <div style="margin-top:16px">{% include "_help.html" %}</div>
 {% endblock %}
-{% block scripts %}<script>window.__wa="{{ wa }}";</script>{% endblock %}
+{% block scripts %}<script>window.__wa="{{ wa }}";</script><script src="/static/js/cart.js?v=20261102c" defer></script>{% endblock %}

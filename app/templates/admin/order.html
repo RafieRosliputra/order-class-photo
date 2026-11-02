@@ -10,7 +10,7 @@
     <p>{{ customer.name }} · {{ customer.email }} · {{ order.phone_used or customer.phone }}</p>
     {% if order.delivery_method=='post' %}<p>Post: {{ order.address }}
       {% set g = gmaps_link(order.lat, order.lng, order.address) %}{% if g %}· <a href="{{ g }}" target="_blank">map</a>{% endif %}</p>
-    {% else %}<p>Pickup{% if event.pickup_location %}: {{ event.pickup_location }}{% endif %}</p>{% endif %}
+    {% else %}<p>Pickup{% if order.pickup_location %}: <strong>{{ order.pickup_location }}</strong>{% elif pickup_list(event.pickup_location)|length == 1 %}: {{ event.pickup_location }}{% endif %}</p>{% endif %}
     <table>
       {% for it in items %}
       <tr><td>{{ it.filename }}<br><span class="note">{{ it.school }} {{ it.class_name }}</span></td>

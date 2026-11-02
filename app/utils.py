@@ -89,3 +89,12 @@ def gmaps_link(lat: float | None, lng: float | None, address: str = "") -> str:
 
 
 STATUS_FLOW = ["awaiting_payment", "reviewing", "paid", "printing", "ready"]
+
+
+def pickup_list(text: str | None) -> list[str]:
+    """An event's pickup points: one per line in the admin form."""
+    return [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+
+
+def clean_pickup_text(text: str | None) -> str:
+    return "\n".join(pickup_list(text))
