@@ -495,15 +495,32 @@ def settings_save(request: Request, background: BackgroundTasks,
 
 @router.post("/settings/test")
 def settings_test(request: Request):
-    """Send a sample receipt text to DeepSeek and show what it read."""
-    from ..ocr import ai_config, ai_parse, merge_ai, parse_text
-    sample = ("Maybank2u\nTransfer Successful\nAmount RM 4.00\nRecipient PROMEDIA CREATIVE SOLUTIONS\n"
-              "Reference No. 7712345678\nDate 06 Nov 2026 10:21:05")
+    """Send a sample receipt IMAGE (RM4.00) to DeepSeek and check it reads the amount."""
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    from ..ocr import ai_config, ai_parse
+    lines = ["Maybank2u", "Transfer Successful", "Amount RM 4.00",
+             "Recipient PROMEDIA CREATIVE SOLUTIONS", "Reference No. 7712345678",
+             "Date 06 Nov 2026 10:21:05"]
     with db() as conn:
         cfg = ai_config(conn)
-    ai = ai_parse(sample, cfg)
-    result = merge_ai(parse_text(sample), ai)
-    ok = bool(ai) and result.get("amount_sen") == 400
+    with tempfile.TemporaryDirectory() as tmp:
+        img = Image.new("RGB", (900, 560), "white")
+        draw = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.load_default(size=36)
+        except TypeError:
+            font = ImageFont.load_default()
+        for i, ln in enumerate(lines):
+            draw.text((40, 30 + i * 85), ln, fill="black", font=font)
+        path = Path(tmp) / "sample.png"
+        img.save(path)
+        ai = ai_parse("", cfg, path)   # image only: proves the model reads pictures
+    amount = str((ai or {}).get("amount") or "").replace("RM", "").strip()
+    ok = bool(ai) and ai.get("_vision") and amount in ("4.00", "4", "4.0")
     return RedirectResponse(f"/admin/settings?test={'ok' if ok else 'fail'}", status_code=303)
 
 

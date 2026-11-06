@@ -170,8 +170,8 @@ def extract_text(image_path: str | Path) -> tuple[str, str]:
 
 # --- DeepSeek: read fields from OCR text --------------------------------------
 _AI_PROMPT = """You read Malaysian bank / e-wallet payment receipts (DuitNow, QR Pay,
-IBG/Instant Transfer, Maybank2u, CIMB, TNG...). The text below came from OCR and
-may contain errors. Reply with ONE JSON object only:
+IBG/Instant Transfer, Maybank2u, CIMB, TNG...). You get the receipt IMAGE and its
+OCR text; trust the image when they disagree. Reply with ONE JSON object only:
 {"is_receipt": true/false,          // is this a payment/transfer receipt at all?
  "status": "successful"|"failed"|"pending"|"unknown",
  "amount": "12.50" or null,         // the amount TRANSFERRED, digits only, 2 decimals
@@ -181,7 +181,7 @@ may contain errors. Reply with ONE JSON object only:
  "bank": "..." or "",               // sender's bank / app
  "recipient": "..." or "",          // recipient name if shown
  "note": "short reason if anything looks wrong, else empty"}
-Never guess an amount that is not in the text. Ignore balances, fees and limits."""
+Never guess an amount you cannot see on the receipt. Ignore balances, fees and limits."""
 
 
 def ai_config(conn=None) -> dict:
@@ -196,29 +196,71 @@ def ai_config(conn=None) -> dict:
     return cfg
 
 
-def ai_parse(text: str, cfg: dict) -> dict | None:
-    """Ask DeepSeek to read the OCR text. None if not configured or on error."""
-    if not cfg.get("key") or not text.strip():
+def _image_data_url(image_path: str | Path) -> str:
+    """Receipt as a JPEG data URL (max 2000 px) for DeepSeek vision."""
+    import base64
+    import io
+
+    from PIL import Image, ImageOps
+
+    img = ImageOps.exif_transpose(Image.open(image_path))
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    img.thumbnail((2000, 2000))
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=90)
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def _json_from(content: str) -> dict | None:
+    try:
+        data = json.loads(content)
+    except ValueError:
+        m = re.search(r"\{.*\}", content or "", re.S)  # model wrapped the JSON in prose
+        if not m:
+            return None
+        try:
+            data = json.loads(m.group(0))
+        except ValueError:
+            return None
+    return data if isinstance(data, dict) else None
+
+
+def ai_parse(text: str, cfg: dict, image_path: str | Path | None = None) -> dict | None:
+    """Ask DeepSeek to read the receipt: the image itself (deepseek-flash reads
+    images) plus the Tesseract text. None if not configured or on error."""
+    if not cfg.get("key") or not (text.strip() or image_path):
         return None
     import httpx
 
     url = cfg["base_url"].rstrip("/") + "/chat/completions"
+    user: list[dict] = [{"type": "text", "text":
+                         "Read this payment receipt. OCR text (may be wrong or empty):\n"
+                         + (text[:6000] or "(none)")}]
+    if image_path:
+        try:
+            user.append({"type": "image_url",
+                         "image_url": {"url": _image_data_url(image_path), "detail": "high"}})
+        except Exception as exc:  # noqa: BLE001
+            log.warning("receipt image not attached: %s", exc)
     body = {
         "model": cfg.get("model") or "deepseek-flash",
         "temperature": 0,
         "response_format": {"type": "json_object"},
-        "messages": [
-            {"role": "system", "content": _AI_PROMPT},
-            {"role": "user", "content": text[:6000]},
-        ],
+        "messages": [{"role": "system", "content": _AI_PROMPT},
+                     {"role": "user", "content": user}],
     }
+    headers = {"Authorization": f"Bearer {cfg['key']}"}
     try:
-        r = httpx.post(url, json=body, timeout=settings.deepseek_timeout,
-                       headers={"Authorization": f"Bearer {cfg['key']}"})
+        r = httpx.post(url, json=body, timeout=settings.deepseek_timeout, headers=headers)
+        if r.status_code == 400:  # e.g. JSON mode not accepted with images: ask plainly
+            body.pop("response_format", None)
+            r = httpx.post(url, json=body, timeout=settings.deepseek_timeout, headers=headers)
         r.raise_for_status()
-        content = r.json()["choices"][0]["message"]["content"]
-        data = json.loads(content)
-        return data if isinstance(data, dict) else None
+        data = _json_from(r.json()["choices"][0]["message"]["content"])
+        if data is not None:
+            data["_vision"] = len(user) > 1
+        return data
     except Exception as exc:  # noqa: BLE001 - AI is a helper, never fatal
         log.warning("deepseek parse failed: %s", exc)
         return None
@@ -235,7 +277,8 @@ def _amount_in_text(amount_sen: int, text: str) -> bool:
 def merge_ai(parsed: dict, ai: dict | None) -> dict:
     """Combine regex fields with DeepSeek's reading. Adds is_receipt / txn_status / ai_note."""
     out = dict(parsed)
-    out.update({"is_receipt": True, "txn_status": "unknown", "ai_note": "", "ai_used": False})
+    out.update({"is_receipt": True, "txn_status": "unknown", "ai_note": "", "ai_used": False,
+                "amount_verified": True})
     if not ai:
         return out
     out["ai_used"] = True
@@ -246,10 +289,16 @@ def merge_ai(parsed: dict, ai: dict | None) -> dict:
     if amt not in (None, ""):
         try:
             sen = round(float(str(amt).replace(",", "").replace("RM", "").strip()) * 100)
-            if sen > 0 and _amount_in_text(sen, parsed.get("raw", "")):
-                out["amount_sen"] = sen
         except ValueError:
-            pass
+            sen = 0
+        if sen > 0:
+            seen = _amount_in_text(sen, parsed.get("raw", ""))
+            if seen:
+                out["amount_sen"] = sen
+            elif ai.get("_vision"):
+                # read from the image only: keep it for the admin, never auto-approve on it
+                out["amount_sen"] = sen
+                out["amount_verified"] = False
     for src, dst in (("reference", "receipt_no"), ("date", "receipt_date"),
                      ("time", "receipt_time"), ("bank", "bank")):
         val = str(ai.get(src) or "").strip()
@@ -260,16 +309,25 @@ def merge_ai(parsed: dict, ai: dict | None) -> dict:
 
 
 def run_ocr(image_path: str, ai_cfg: dict | None = None) -> dict:
-    """OCR an image and read its fields. ok=False if no text could be read."""
+    """Read a receipt: Tesseract text + DeepSeek (image and text). ok=False if
+    neither found anything."""
     if not settings.ocr_enabled:
         return {"ok": False, "reason": "disabled", "engine": ""}
+    cfg = ai_cfg or ai_config()
     try:
         text, engine = extract_text(image_path)
     except Exception as exc:  # noqa: BLE001 - OCR must never crash the request
-        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}", "engine": ""}
-    parsed = merge_ai(parse_text(text), ai_parse(text, ai_cfg or ai_config()))
-    parsed["engine"] = engine + ("+deepseek" if parsed["ai_used"] else "")
-    parsed["ok"] = bool(text.strip())
+        text, engine = "", ""
+        log.warning("tesseract failed: %s", exc)
+        if not cfg.get("key"):
+            return {"ok": False, "reason": f"{type(exc).__name__}: {exc}", "engine": ""}
+    ai = ai_parse(text, cfg, image_path)
+    parsed = merge_ai(parse_text(text), ai)
+    parts = [engine] if engine else []
+    if parsed["ai_used"]:
+        parts.append("deepseek-vision" if ai.get("_vision") else "deepseek")
+    parsed["engine"] = "+".join(parts)
+    parsed["ok"] = bool(text.strip()) or bool(parsed.get("amount_sen"))
     if not parsed["ok"]:
         parsed["reason"] = "no text found"
     return parsed

@@ -3,15 +3,16 @@
 {% block content %}
 <div class="spread"><h1>Settings</h1><a class="btn ghost sm" href="/admin/orders">← Orders</a></div>
 {% if request.query_params.get('saved') %}<div class="card" style="border-color:var(--ok)"><span class="ok">Saved. Unverified receipts are being re-checked.</span></div>{% endif %}
-{% if request.query_params.get('test') == 'ok' %}<div class="card" style="border-color:var(--ok)"><span class="ok">DeepSeek works: it read RM4.00 from the sample receipt.</span></div>
+{% if request.query_params.get('test') == 'ok' %}<div class="card" style="border-color:var(--ok)"><span class="ok">DeepSeek works: it read RM4.00 from a sample receipt image.</span></div>
 {% elif request.query_params.get('test') %}<div class="card" style="border-color:var(--err)"><span class="error">DeepSeek test failed. Check the API key, model and balance.</span></div>{% endif %}
 
 <div class="grid2">
 <form class="card stack" method="post" action="/admin/settings">
   <h2>Receipt OCR (DeepSeek)</h2>
   <p class="note">Tesseract reads the text on the receipt ({{ 'installed' if tesseract else 'NOT installed — rebuild the image' }}).
-    DeepSeek then reads the amount, reference and date from that text. Without a key, simple pattern matching is used.
-    A receipt is auto-approved only when the amount is exactly the order total.</p>
+    DeepSeek (deepseek-flash) looks at the receipt image itself plus that text, and reads the amount, reference and date.
+    Without a key, simple pattern matching is used. A receipt is auto-approved only when the amount is exactly the
+    order total AND Tesseract also sees that amount; an amount read from the image alone goes to review.</p>
   <label>API key {% if key_mask %}<span class="note">current: {{ key_mask }}{{ '' if key_from_db else ' (from .env)' }}</span>{% endif %}</label>
   <input name="deepseek_api_key" type="password" autocomplete="off" placeholder="{{ 'Leave empty to keep the current key' if key_mask else 'sk-...' }}">
   {% if key_from_db %}<label class="row" style="gap:6px"><input type="checkbox" name="clear_key" value="1" style="width:auto"> Remove saved key</label>{% endif %}
@@ -26,7 +27,7 @@
 </form>
 <div class="card stack">
   <h2>Test</h2>
-  <p class="note">Sends a sample receipt text (RM4.00) to DeepSeek and checks it reads the amount.</p>
+  <p class="note">Sends a sample receipt image (RM4.00) to DeepSeek and checks it reads the amount from the picture.</p>
   <form method="post" action="/admin/settings/test"><button class="btn ghost block">Test DeepSeek</button></form>
 </div>
 </div>

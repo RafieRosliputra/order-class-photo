@@ -172,3 +172,43 @@ def test_rerun_first_copy_is_not_duplicate_of_later_copy(monkeypatch):
         st = orders_service.rerun_receipt(conn, ids[0])
         notes = [r["ocr_note"] for r in conn.execute("SELECT ocr_note FROM receipts ORDER BY id")]
     assert notes == ["match", "duplicate"] and st["paid_sen"] == 500
+
+
+def test_vision_amount_not_in_text_goes_to_review(monkeypatch):
+    parsed = ocr.parse_text("blurry")
+    out = ocr.merge_ai(parsed, {"is_receipt": True, "status": "successful", "amount": "5.00", "_vision": True})
+    assert out["amount_sen"] == 500 and out["amount_verified"] is False
+    _fake_ocr(monkeypatch, out | {"ok": True, "engine": "deepseek-vision"})
+    with db() as conn:
+        oid, cust = _order(conn)
+        st = orders_service.process_receipt(conn, oid, cust, _png(), "r.png", "image/png")
+        r = one(conn, "SELECT * FROM receipts WHERE order_id=?", (oid,))
+    assert st["status"] == "reviewing" and r["ocr_note"] == "unverified" and r["amount_sen"] == 500
+
+
+def test_ai_parse_sends_image_and_retries_without_json_mode(monkeypatch, tmp_path):
+    img = tmp_path / "r.png"; Image.new("RGB", (50, 50), "white").save(img)
+    calls = []
+
+    class Resp:
+        def __init__(self, code, content=""):
+            self.status_code, self._c = code, content
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError(self.status_code)
+        def json(self):
+            return {"choices": [{"message": {"content": self._c}}]}
+
+    def fake_post(url, json, timeout, headers):
+        calls.append(json)
+        if "response_format" in json:
+            return Resp(400)
+        return Resp(200, 'Here: {"is_receipt": true, "status": "successful", "amount": "4.00"}')
+
+    import httpx
+    monkeypatch.setattr(httpx, "post", fake_post, raising=False)
+    data = ocr.ai_parse("RM 4.00", {"key": "k", "base_url": "https://api.deepseek.com", "model": "deepseek-flash"}, img)
+    user = calls[0]["messages"][1]["content"]
+    assert calls[0]["model"] == "deepseek-flash"
+    assert user[1]["type"] == "image_url" and user[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    assert len(calls) == 2 and data["amount"] == "4.00" and data["_vision"] is True

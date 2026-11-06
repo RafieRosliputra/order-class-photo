@@ -227,6 +227,8 @@ STRINGS: dict[str, dict[str, str]] = {
                            "en": "This reference number was used before. We will check it."},
     "ocr_note_old_date": {"ms": "Tarikh resit lebih awal daripada order. Kami akan semak.",
                           "en": "The receipt is dated before the order. We will check it."},
+    "ocr_note_unverified": {"ms": "Amaun dibaca daripada gambar resit. Kami akan sahkan secara manual.",
+                            "en": "The amount was read from the receipt image. We will confirm it manually."},
     "ocr_note_": {"ms": "Sedang disemak.", "en": "Being checked."},
     "uploaded_paid": {"ms": "Resit diterima dan bayaran disahkan. Terima kasih!",
                       "en": "Receipt received and payment confirmed. Thank you!"},

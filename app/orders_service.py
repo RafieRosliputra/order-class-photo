@@ -59,6 +59,7 @@ def create_order_from_cart(conn, event_id, customer_id, cart, *, delivery, addre
 NOTE_MATCH, NOTE_PARTIAL, NOTE_OVER = "match", "partial", "over"
 NOTE_UNREADABLE, NOTE_NO_AMOUNT, NOTE_NOT_RECEIPT = "unreadable", "no_amount", "not_receipt"
 NOTE_FAILED_TXN, NOTE_DUPLICATE, NOTE_OLD_DATE = "failed_txn", "duplicate", "old_date"
+NOTE_UNVERIFIED = "unverified"  # amount read from the image only: admin confirms
 
 
 def _ocr_bytes(conn, data: bytes, mime: str) -> dict:
@@ -81,6 +82,8 @@ def _judge(conn, order, ocr: dict, receipt_id: int | None) -> tuple[int, str, bo
     amount = ocr.get("amount_sen")
     if not amount:
         return 0, NOTE_NO_AMOUNT, False
+    if ocr.get("amount_verified") is False:
+        return 0, NOTE_UNVERIFIED, False
     # same receipt uploaded twice (identical OCR text) counts once
     raw = (ocr.get("raw") or "").strip()
     if raw and one(conn, "SELECT 1 FROM receipts WHERE order_id=? AND id!=? AND accepted=1 "
