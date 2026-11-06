@@ -340,13 +340,19 @@ def finalize_payment(order_id: int) -> None:
             if not order or order["status"] != "paid":
                 return
             cust = one(conn, "SELECT * FROM customers WHERE id=?", (order["customer_id"],))
-            session_row = sheets.get_or_create_session(conn, order["event_id"])
-            conn.execute("UPDATE orders SET print_session_id=? WHERE id=?",
-                         (session_row["id"], order_id))
+            session_row = None
             try:
-                printing.copy_order_to_print(conn, order_id)
-            except Exception:  # noqa: BLE001
+                session_row = sheets.get_or_create_session(conn, order["event_id"])
+                conn.execute("UPDATE orders SET print_session_id=? WHERE id=?",
+                             (session_row["id"], order_id))
+            except Exception:  # noqa: BLE001 - keep going: prints + email matter more
+                log.exception("print session failed for order %s", order_id)
+            try:
+                done = printing.copy_order_to_print(conn, order_id)
+                audit(conn, "system", "prints_copied", "order", order_id, f"{len(done)} file(s)")
+            except Exception as exc:  # noqa: BLE001
                 log.exception("print copy failed for order %s", order_id)
+                audit(conn, "system", "prints_copy_failed", "order", order_id, f"{type(exc).__name__}: {exc}"[:300])
             try:
                 sheets.append_order(conn, order_id, session_row)
             except Exception:  # noqa: BLE001

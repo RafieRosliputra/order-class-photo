@@ -22,7 +22,9 @@ _gc = None
 
 
 def is_configured() -> bool:
-    return bool(settings.google_sa_json and settings.gsheet_parent_folder_id)
+    from pathlib import Path
+    return bool(settings.google_sa_json and settings.gsheet_parent_folder_id
+                and Path(settings.google_sa_json).is_file())
 
 
 def _client():
@@ -41,13 +43,17 @@ def get_or_create_session(conn, event_id: int):
     ev = one(conn, "SELECT * FROM events WHERE id=?", (event_id,))
     sheet_id, url = "", ""
     if is_configured():
-        gc = _client()
-        title = f"{ev['name']} — {local_now():%Y-%m-%d %H%M}"
-        sh = gc.create(title, folder_id=settings.gsheet_parent_folder_id)
-        ws = sh.sheet1
-        ws.update(range_name="A1", values=[HEADER])
-        ws.freeze(rows=1)
-        sheet_id, url = sh.id, sh.url
+        try:  # a Google problem must never stop prints being copied
+            gc = _client()
+            title = f"{ev['name']} — {local_now():%Y-%m-%d %H%M}"
+            sh = gc.create(title, folder_id=settings.gsheet_parent_folder_id)
+            ws = sh.sheet1
+            ws.update(range_name="A1", values=[HEADER])
+            ws.freeze(rows=1)
+            sheet_id, url = sh.id, sh.url
+        except Exception:  # noqa: BLE001
+            import logging
+            logging.getLogger("sheets").exception("job-list sheet not created")
     sid = conn.execute(
         "INSERT INTO print_sessions(event_id, sheet_id, sheet_url, active) VALUES (?,?,?,1)",
         (event_id, sheet_id, url),

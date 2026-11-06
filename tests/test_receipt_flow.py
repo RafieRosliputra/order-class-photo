@@ -264,3 +264,31 @@ def test_whatsapp_links():
         o = one(conn, "SELECT * FROM orders WHERE id=?", (oid,))
     link = orders_service.customer_wa_link(o, "", "balance")
     assert link.startswith("https://wa.me/60127983745?text=") and "RM2.00" in __import__("urllib.parse").parse.unquote(link)
+
+
+def test_finalize_copies_prints_even_if_sheet_fails(monkeypatch):
+    from app import printing, sheets
+    copied, mailed = [], []
+    monkeypatch.setattr(sheets, "get_or_create_session", lambda conn, eid: (_ for _ in ()).throw(RuntimeError("no SA")))
+    monkeypatch.setattr(printing, "copy_order_to_print", lambda conn, oid: copied.append(oid) or ["x"])
+    monkeypatch.setattr(orders_service, "send_payment_confirmed", lambda *a: mailed.append(a[1]))
+    with db() as conn:
+        oid, cust = _order(conn)
+        conn.execute("UPDATE orders SET status='paid' WHERE id=?", (oid,))
+    orders_service.finalize_payment(oid)
+    assert copied == [oid] and len(mailed) == 1
+
+
+def test_print_path_keeps_orders_apart(monkeypatch):
+    from app import nextcloud, printing
+    from app.config import settings as s
+    up = []
+    monkeypatch.setattr(type(s), "nc_instance", lambda self, iid=None: {"id": "x"})
+    monkeypatch.setattr(type(s), "nc_print_instance", lambda self: {"id": "y"})
+    monkeypatch.setattr(nextcloud, "download", lambda inst, p: b"img")
+    monkeypatch.setattr(nextcloud, "upload", lambda inst, dest, data, ct: up.append(dest))
+    with db() as conn:
+        oid, cust = _order(conn)
+        no = one(conn, "SELECT order_no FROM orders WHERE id=?", (oid,))["order_no"]
+        printing.copy_order_to_print(conn, oid)
+    assert up == [f"Untuk-Cetak/e/4R/1salinan/{no}_DSC_0001.jpg"]

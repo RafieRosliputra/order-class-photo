@@ -3,7 +3,10 @@
 Originals are streamed from the EVENT's Nextcloud instance; the print copies are
 written to the configured PRINT instance (settings.nc_print_instance), under:
 
-    <PRINT_FOLDER>/<event-slug>/<SIZE>/<N>salinan/<original filename>
+    <PRINT_FOLDER>/<event-slug>/<SIZE>/<N>salinan/<order no>_<original filename>
+
+The order number in the name keeps two orders of the same photo, size and
+copies from overwriting each other (each must be printed).
 """
 from __future__ import annotations
 
@@ -32,7 +35,7 @@ def copy_order_to_print(conn, order_id: int) -> list[str]:
     for it in query(conn, "SELECT * FROM order_items WHERE order_id=?", (order_id,)):
         data = nextcloud.download(src, it["rel_path"])
         fname = it["filename"]
-        dest = f"{base}/{it['size_code']}/{it['qty']}salinan/{fname}"
+        dest = f"{base}/{it['size_code']}/{it['qty']}salinan/{order['order_no']}_{fname}"
         ext = posixpath.splitext(fname)[1].lower()
         nextcloud.upload(dst, dest, data, CONTENT_TYPES.get(ext, "application/octet-stream"))
         written.append(dest)
