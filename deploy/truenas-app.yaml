@@ -2,14 +2,15 @@
 # Install: Apps -> Discover Apps -> Custom App -> Install via YAML, OR via
 #   midclt call app.create '{"app_name":"photo-order","custom_app":true,
 #     "custom_compose_config_string":"<this file>"}'
-# Build the image on the host first:
-#   docker build -t johorstudio-photo-order:local /mnt/ssd/website-order
+# The image is built from the repo on every (re)deploy (pull_policy: build).
 #
 # cloudflared (existing tunnel) routes shop.johorstudio.com -> http://<host>:8099
 services:
   photo-order:
+    build:
+      context: /mnt/ssd/website-order
     image: johorstudio-photo-order:local
-    pull_policy: never
+    pull_policy: build
     restart: unless-stopped
     env_file:
       - /mnt/ssd/website-order/.env

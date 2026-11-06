@@ -5,15 +5,15 @@ This is how the live instance is wired on the JohorStudio.com TrueNAS (`m10`).
 ## TrueNAS
 - **Code**: `/mnt/ssd/website-order` (this repo, `manual-payment` branch).
 - **Data**: `/mnt/a/storage/website/print purchase/` → `SQlite/ cache/ receipts/ trash/ backups/`.
-- **Image**: built on the host — `docker build -t johorstudio-photo-order:local /mnt/ssd/website-order`.
+- **Image**: built by the app itself from the repo (`build:` + `pull_policy: build` in the compose),
+  so no sudo/docker access is needed.
 - **App**: a **Custom App** named `photo-order` (see `truenas-app.yaml`), published on host
   port **8099** → container 8000. Shows under **Apps**.
 - After editing `.env`, redeploy: `midclt call app.redeploy photo-order` (or Apps → restart).
-- Rebuild after a code change:
+- Rebuild after a code change (redeploy rebuilds the image):
   ```
   cd /mnt/ssd/website-order && git pull
-  docker build -t johorstudio-photo-order:local .
-  midclt call app.redeploy photo-order
+  midclt call -j app.redeploy photo-order
   ```
 
 ## Cloudflare (tunnel `m10`)
@@ -30,7 +30,8 @@ This is how the live instance is wired on the JohorStudio.com TrueNAS (`m10`).
 - `SMTP_*` (relay) for login + payment emails.
 - `GOOGLE_SA_JSON` + `GSHEET_PARENT_FOLDER_ID` for the job-list sheet.
 - `UMAMI_SRC=https://ana.johorstudio.com/script.js` + `UMAMI_WEBSITE_ID` (add the site in Umami).
-- Enable OCR: uncomment the PaddleOCR line in the `Dockerfile`, set `OCR_ENABLED=true`, rebuild.
+- OCR: Tesseract is in the image; keep `OCR_ENABLED=true`. Add the DeepSeek API key in
+  Admin → Settings (optional; without it a pattern match reads the receipt).
 
 ## Quick test
 `midclt`-run the demo seed inside the container, or create a real event at `/admin`.
