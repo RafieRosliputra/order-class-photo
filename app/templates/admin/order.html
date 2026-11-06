@@ -14,7 +14,9 @@
 <div class="grid2">
   <div class="card stack">
     <h2>Order</h2>
-    <p>{{ event.name }} · <span class="tag">{{ order.status }}</span></p>
+    <p>{{ event.name }} · <span class="tag">{{ order.status }}</span>
+      {% if batch %}· <a href="/admin/events/{{ event.id }}#batches"><span class="tag">Batch {{ batch.number }} ({{ batch.status }})</span></a>
+      {% if batch_link %}· <a href="{{ batch_link }}" target="_blank" rel="noopener">folder</a>{% endif %}{% endif %}</p>
     <p>{{ customer.name }} · {{ customer.email }} · {{ order.phone_used or customer.phone }}</p>
     {% if order.delivery_method=='post' %}<p>Post: {{ order.address }}
       {% set g = gmaps_link(order.lat, order.lng, order.address) %}{% if g %}· <a href="{{ g }}" target="_blank">map</a>{% endif %}</p>
@@ -58,13 +60,13 @@
   <div class="stack">
     <div class="card stack">
       <h2>Actions</h2>
-      <form method="post" action="/admin/orders/{{ order.id }}/mark-paid"><button class="btn block">Mark PAID (→ copy prints + sheet + email)</button></form>
+      <form method="post" action="/admin/orders/{{ order.id }}/mark-paid"><button class="btn block">Mark PAID (→ batch + email customer)</button></form>
       <form method="post" action="/admin/orders/{{ order.id }}/override-amount" class="row" style="gap:6px">
         <input name="amount" placeholder="RM paid" style="flex:1"><button class="btn ghost">Override paid</button></form>
       <form method="post" action="/admin/orders/{{ order.id }}/status" class="row" style="gap:6px">
         <select name="status">{% for s in ['awaiting_payment','reviewing','paid','printing','ready'] %}<option value="{{ s }}" {{ 'selected' if order.status==s }}>{{ s }}</option>{% endfor %}</select>
         <button class="btn ghost">Set status</button></form>
-      <form method="post" action="/admin/orders/{{ order.id }}/reprint"><button class="btn ghost block">Re-copy prints + append sheet</button></form>
+      <form method="post" action="/admin/orders/{{ order.id }}/reprint"><button class="btn ghost block" {{ 'disabled' if not batch or batch.status == 'open' }}>Arrange this order's batch again</button></form>
       <form method="post" action="/admin/orders/{{ order.id }}/cancel" class="row" style="gap:6px">
         <input name="reason" placeholder="Cancel reason" style="flex:1"><button class="btn ghost">Cancel</button></form>
       {% if not order.deleted_at %}

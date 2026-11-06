@@ -77,14 +77,39 @@
       <p class="note">Reads <code>{{ event.nextcloud_folder or '(set folder)' }}</code> → class subfolders → photos, and builds WebP previews.</p>
     </div>
 
-    <div class="card stack">
-      <h2>Print session</h2>
-      {% if session %}
-        <p>Active session #{{ session.id }}{% if session.sheet_url %} · <a href="{{ session.sheet_url }}" target="_blank">Google Sheet</a>{% endif %}</p>
-      {% else %}<p class="muted">No active session (next paid order opens a new sheet).</p>{% endif %}
-      <form method="post" action="/admin/events/{{ event.id }}/new-session">
-        <button class="btn ghost block" type="submit">End session → new sheet next time</button></form>
-      <p class="note">Use after clearing the print folder (= new session).</p>
+    <div class="card stack" id="batches">
+      <div class="spread"><h2 style="margin:0">Print batches</h2>
+        <a class="btn ghost sm" href="/admin/events/{{ event.id }}/sheet.xlsx">Main spreadsheet (.xlsx)</a></div>
+      {% if request.query_params.get('batch') == 'closing' %}<p class="ok">Arranging files in Nextcloud… refresh in a minute.</p>{% endif %}
+      {% set open_b = bsum.batches | selectattr('status', 'equalto', 'open') | list %}
+      {% if open_b %}{% set b = open_b[0] %}
+      <div class="ocr-fb good">
+        <strong>Batch {{ b.number }} (open)</strong> — since {{ b.opened_at[:10] }}<br>
+        {{ b.orders }} order · {{ b.files }} file · {{ b.copies }} salinan · {{ b.total }}
+        {% if b.orders %}
+        <form method="post" action="/admin/batches/{{ b.id }}/close" style="margin-top:8px"
+              data-confirm="Close Batch {{ b.number }}? {{ b.orders }} paid order(s) ({{ b.copies }} prints) are arranged in Nextcloud by size and copies, and move to 'printing'. New paid orders go into Batch {{ b.number + 1 }}.">
+          <button class="btn block">Tutup Batch {{ b.number }} → susun fail</button></form>
+        <a class="note" href="/admin/batches/{{ b.id }}/list.csv">Preview list (.csv)</a>
+        {% endif %}
+      </div>
+      {% else %}<p class="muted">No open batch — the next paid order starts one.</p>{% endif %}
+      {% for b in bsum.batches if b.status != 'open' %}
+      <div class="line" style="align-items:flex-start"><div style="flex:1">
+        <strong>Batch {{ b.number }}</strong>
+        <span class="tag {{ 'flag' if b.status in ['error','closing'] else '' }}">{{ b.status }}</span>
+        <div class="note">closed {{ (b.closed_at or '')[:16] }} · {{ b.orders }} order · {{ b.n_files }} file · {{ b.n_copies }} salinan · {{ b.total }}</div>
+        {% if b.error %}<div class="error" style="font-size:12px">{{ b.error }}</div>{% endif %}
+        <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">
+          {% if b.link %}<a class="btn sm" href="{{ b.link }}" target="_blank" rel="noopener">Open folder in Nextcloud</a>{% endif %}
+          <a class="btn ghost sm" href="/admin/batches/{{ b.id }}/list.csv">List (.csv)</a>
+          <form method="post" action="/admin/batches/{{ b.id }}/arrange" style="margin:0"
+                data-confirm="Arrange Batch {{ b.number }} again in Nextcloud? Files are written again into Batch-{{ b.number }}.">
+            <button class="btn ghost sm">Arrange again</button></form>
+        </div>
+      </div></div>
+      {% endfor %}
+      {% if bsum.event_link %}<a class="note" href="{{ bsum.event_link }}" target="_blank" rel="noopener">Event print folder in Nextcloud</a>{% endif %}
     </div>
 
     <div class="card stack">

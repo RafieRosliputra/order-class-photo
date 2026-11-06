@@ -7,7 +7,7 @@ import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import imaging, nextcloud, printing, sheets
+from . import batches, imaging
 from .config import settings
 from .database import audit, db, get_setting, one, query
 from .email_send import send_admin_notice, send_payment_confirmed
@@ -333,34 +333,27 @@ def customer_wa_link(order, cust_phone: str, kind: str, reason: str = "") -> str
 
 # --- finalisation (run in background after a successful payment) -----------
 def finalize_payment(order_id: int) -> None:
-    """Copy prints to Nextcloud, append the job-list sheet, email the customer."""
+    """After a payment: put the order in its event's open print batch, email the
+    customer, refresh the event's main spreadsheet. Files are arranged only when
+    the admin closes the batch (app/batches.py)."""
+    event_id = None
     try:
         with db() as conn:
             order = one(conn, "SELECT * FROM orders WHERE id=?", (order_id,))
             if not order or order["status"] != "paid":
                 return
+            event_id = order["event_id"]
             cust = one(conn, "SELECT * FROM customers WHERE id=?", (order["customer_id"],))
-            session_row = None
             try:
-                session_row = sheets.get_or_create_session(conn, order["event_id"])
-                conn.execute("UPDATE orders SET print_session_id=? WHERE id=?",
-                             (session_row["id"], order_id))
-            except Exception:  # noqa: BLE001 - keep going: prints + email matter more
-                log.exception("print session failed for order %s", order_id)
-            try:
-                done = printing.copy_order_to_print(conn, order_id)
-                audit(conn, "system", "prints_copied", "order", order_id, f"{len(done)} file(s)")
-            except Exception as exc:  # noqa: BLE001
-                log.exception("print copy failed for order %s", order_id)
-                audit(conn, "system", "prints_copy_failed", "order", order_id, f"{type(exc).__name__}: {exc}"[:300])
-            try:
-                sheets.append_order(conn, order_id, session_row)
+                batches.assign_order(conn, order_id)
             except Exception:  # noqa: BLE001
-                log.exception("sheet append failed for order %s", order_id)
-            status_url = f"{settings.base_url}/order/{order['order_no']}"
-            try:
-                send_payment_confirmed(cust["email"], order["order_no"], order["total_sen"], status_url)
-            except Exception:  # noqa: BLE001
-                log.exception("confirmation email failed for order %s", order_id)
+                log.exception("batch assign failed for order %s", order_id)
+        status_url = f"{settings.base_url}/order/{order['order_no']}"
+        try:
+            send_payment_confirmed(cust["email"], order["order_no"], order["total_sen"], status_url)
+        except Exception:  # noqa: BLE001
+            log.exception("confirmation email failed for order %s", order_id)
     except Exception:  # noqa: BLE001
         log.exception("finalize_payment failed for order %s", order_id)
+    if event_id:
+        batches.write_sheet(event_id)

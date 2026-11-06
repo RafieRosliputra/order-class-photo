@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir \
         "python-multipart>=0.0.9" "itsdangerous>=2.2.0" "pydantic-settings>=2.4.0" \
         "email-validator>=2.2.0" "httpx>=0.27.0" "pillow>=10.4.0" "pdf2image>=1.17.0" \
         "qrcode>=7.4.2" "gspread>=6.1.2" "google-auth>=2.34.0" \
-        "apscheduler>=3.10.4" "python-dateutil>=2.9.0"
+        "apscheduler>=3.10.4" "python-dateutil>=2.9.0" "openpyxl>=3.1.2"
 
 COPY . .
 

@@ -11,7 +11,8 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .database import init_db
+from . import batches
+from .database import db, init_db
 from .deps import render
 from .orders_service import rescan_pending
 from .routers import admin, auth, cart, checkout, orders, public, receipts
@@ -26,6 +27,8 @@ async def lifespan(app: FastAPI):
     settings.ensure_dirs()
     init_db()
     start_scheduler()
+    with db() as conn:   # paid orders from before batches existed -> open batch
+        batches.backfill(conn)
     threading.Thread(target=rescan_pending, name="receipt-rescan", daemon=True).start()
     yield
     shutdown_scheduler()

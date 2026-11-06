@@ -266,29 +266,88 @@ def test_whatsapp_links():
     assert link.startswith("https://wa.me/60127983745?text=") and "RM2.00" in __import__("urllib.parse").parse.unquote(link)
 
 
-def test_finalize_copies_prints_even_if_sheet_fails(monkeypatch):
-    from app import printing, sheets
-    copied, mailed = [], []
-    monkeypatch.setattr(sheets, "get_or_create_session", lambda conn, eid: (_ for _ in ()).throw(RuntimeError("no SA")))
-    monkeypatch.setattr(printing, "copy_order_to_print", lambda conn, oid: copied.append(oid) or ["x"])
+def _paid_order(conn, eid, pid, sid, cust, qty, phone="1"):
+    oid = orders_service.create_order_from_cart(
+        conn, eid, cust, {f"{eid}:{pid}:{sid}": qty}, delivery="pickup", address="",
+        lat=None, lng=None, zone="west", category="", phone=phone)
+    conn.execute("UPDATE orders SET status='paid', paid_sen=total_sen WHERE id=?", (oid,))
+    return oid
+
+
+def test_finalize_puts_order_in_open_batch_and_emails(monkeypatch):
+    from app import batches
+    mailed, sheets_written = [], []
     monkeypatch.setattr(orders_service, "send_payment_confirmed", lambda *a: mailed.append(a[1]))
+    monkeypatch.setattr(batches, "write_sheet", lambda eid: sheets_written.append(eid))
     with db() as conn:
         oid, cust = _order(conn)
         conn.execute("UPDATE orders SET status='paid' WHERE id=?", (oid,))
     orders_service.finalize_payment(oid)
-    assert copied == [oid] and len(mailed) == 1
-
-
-def test_print_path_keeps_orders_apart(monkeypatch):
-    from app import nextcloud, printing
-    from app.config import settings as s
-    up = []
-    monkeypatch.setattr(type(s), "nc_instance", lambda self, iid=None: {"id": "x"})
-    monkeypatch.setattr(type(s), "nc_print_instance", lambda self: {"id": "y"})
-    monkeypatch.setattr(nextcloud, "download", lambda inst, p: b"img")
-    monkeypatch.setattr(nextcloud, "upload", lambda inst, dest, data, ct: up.append(dest))
     with db() as conn:
-        oid, cust = _order(conn)
-        no = one(conn, "SELECT order_no FROM orders WHERE id=?", (oid,))["order_no"]
-        printing.copy_order_to_print(conn, oid)
-    assert up == [f"Untuk-Cetak/e/4R/1salinan/{no}_DSC_0001.jpg"]
+        b = one(conn, "SELECT b.* FROM orders o JOIN batches b ON b.id=o.batch_id WHERE o.id=?", (oid,))
+    assert b["number"] == 1 and b["status"] == "open" and len(mailed) == 1 and sheets_written
+
+
+def test_close_batch_arranges_by_size_and_summed_copies(monkeypatch):
+    from app import batches, nextcloud
+    from app.config import settings as s
+    up = {}
+    monkeypatch.setattr(type(s), "nc_instance", lambda self, iid=None: {"id": "src"})
+    monkeypatch.setattr(type(s), "nc_print_instance", lambda self: {"id": "dst", "base_url": "https://cloud.johorstudio.cc"})
+    monkeypatch.setattr(nextcloud, "download", lambda inst, p: b"img:" + p.encode())
+    monkeypatch.setattr(nextcloud, "upload", lambda inst, dest, data, ct: up.__setitem__(dest, data))
+    with db() as conn:
+        eid, sid, pid, cust = _setup_event(conn)
+        # second class with a photo of the SAME file name (a different photo)
+        cid2 = conn.execute("INSERT INTO classes(event_id,school,name,folder_path) VALUES (?,?,?,?)",
+                            (eid, "SKA", "6 Cerdik", "f/SKA - 6 Cerdik")).lastrowid
+        pid2 = conn.execute("INSERT INTO photos(event_id,class_id,filename,rel_path) VALUES (?,?,?,?)",
+                            (eid, cid2, "DSC_0001.jpg", "f/SKA - 6 Cerdik/DSC_0001.jpg")).lastrowid
+        o1 = _paid_order(conn, eid, pid, sid, cust, 1)
+        o2 = _paid_order(conn, eid, pid, sid, cust, 2)      # same photo, same size -> 3 copies
+        o3 = _paid_order(conn, eid, pid2, sid, cust, 3)     # other photo, same name, 3 copies
+        for o in (o1, o2, o3):
+            batches.assign_order(conn, o)
+        b = one(conn, "SELECT * FROM batches WHERE event_id=?", (eid,))
+        assert batches.start_close(conn, b["id"], "admin")
+    monkeypatch.setattr(batches, "write_sheet", lambda eid: None)
+    batches.arrange(b["id"])
+    base = "Untuk-Cetak/e/Batch-1/4R/3salinan/"
+    assert set(up) == {base + "DSC_0001.jpg", base + "DSC_0001 (6 Cerdik).jpg",
+                       "Untuk-Cetak/e/Batch-1/senarai-batch-1.csv"}
+    assert up[base + "DSC_0001.jpg"].endswith(b"6 Bestari/DSC_0001.jpg")
+    with db() as conn:
+        b = one(conn, "SELECT * FROM batches WHERE id=?", (b["id"],))
+        st = {r["status"] for r in conn.execute("SELECT status FROM orders WHERE batch_id=?", (b["id"],))}
+        # a new paid order now starts Batch 2
+        o4 = _paid_order(conn, eid, pid, sid, cust, 1)
+        b2 = batches.assign_order(conn, o4)
+    assert b["status"] == "closed" and b["n_files"] == 2 and b["n_copies"] == 6 and st == {"printing"}
+    assert b2["number"] == 2
+    assert batches.files_link(b["folder"]) == "https://cloud.johorstudio.cc/apps/files/?dir=/Untuk-Cetak/e/Batch-1"
+
+
+def test_main_spreadsheet_has_orders_items_and_batches():
+    from openpyxl import load_workbook
+    from app import batches
+    with db() as conn:
+        eid, sid, pid, cust = _setup_event(conn)
+        o1 = _paid_order(conn, eid, pid, sid, cust, 2)
+        batches.assign_order(conn, o1)
+        orders_service.create_order_from_cart(conn, eid, cust, {f"{eid}:{pid}:{sid}": 1}, delivery="pickup",
+                                              address="", lat=None, lng=None, zone="west", category="", phone="1")
+        data = batches.build_sheet(conn, eid)
+    wb = load_workbook(io.BytesIO(data))
+    assert wb.sheetnames == ["Semua order", "Item", "Ringkasan batch"]
+    rows = list(wb["Semua order"].values)
+    assert rows[1][0] == "No. Order" and rows[2][6] == "Batch 1" and rows[3][5] == "awaiting_payment"
+    assert list(wb["Ringkasan batch"].values)[1][:2] == ("Batch 1", "open")
+
+
+def test_backfill_puts_old_paid_orders_in_batch():
+    from app import batches
+    with db() as conn:
+        eid, sid, pid, cust = _setup_event(conn)
+        o1 = _paid_order(conn, eid, pid, sid, cust, 1)
+        assert batches.backfill(conn) == 1
+        assert one(conn, "SELECT batch_id FROM orders WHERE id=?", (o1,))["batch_id"]

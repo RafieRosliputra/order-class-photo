@@ -18,7 +18,9 @@ Active development happens on the **`manual-payment`** branch. `main` stays clea
 - **uv** + `pyproject.toml` for dependencies.
 - **Tesseract + DeepSeek** for receipts (`app/ocr.py`): Tesseract reads the text, DeepSeek reads amount/ref/date (key in Admin → Settings or `DEEPSEEK_API_KEY`); regex fallback. Amount from AI must appear in the OCR text.
 - **WebDAV** to Nextcloud for photo originals + print output (`app/nextcloud.py`).
-- **gspread** for the Google-Sheet job list; **aiosmtplib** for email.
+- **Print batches** (`app/batches.py`): paid orders join the event's open batch; closing it arranges
+  files in Nextcloud `Untuk-Cetak/<event>/Batch-N/<SIZE>/<N>salinan/` (same photo = one file, copies summed)
+  + `senarai-batch-N.csv`; **openpyxl** main spreadsheet per event. SMTP for email.
 - Background work via FastAPI `BackgroundTasks`; schedules via APScheduler
   (daily trash sweep + DB backup).
 

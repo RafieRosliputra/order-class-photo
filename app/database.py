@@ -166,6 +166,23 @@ CREATE TABLE IF NOT EXISTS slides (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS batches (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id    INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    number      INTEGER NOT NULL,                 -- Batch 1, 2, 3 … per event
+    status      TEXT NOT NULL DEFAULT 'open',     -- open | closing | closed | error
+    opened_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    closed_at   TEXT,
+    arranged_at TEXT,
+    folder      TEXT NOT NULL DEFAULT '',         -- Nextcloud path of the batch folder
+    n_orders    INTEGER NOT NULL DEFAULT 0,
+    n_files     INTEGER NOT NULL DEFAULT 0,
+    n_copies    INTEGER NOT NULL DEFAULT 0,
+    total_sen   INTEGER NOT NULL DEFAULT 0,
+    error       TEXT NOT NULL DEFAULT '',
+    UNIQUE(event_id, number)
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
     key        TEXT PRIMARY KEY,
     value      TEXT NOT NULL DEFAULT '',
@@ -240,6 +257,8 @@ def init_db() -> None:
             # overpayment returned to the customer
             "ALTER TABLE orders ADD COLUMN refunded_sen INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE orders ADD COLUMN refunded_at TEXT",
+            # print batch the order belongs to (set when it is paid)
+            "ALTER TABLE orders ADD COLUMN batch_id INTEGER REFERENCES batches(id)",
         ):
             try:
                 conn.execute(stmt)

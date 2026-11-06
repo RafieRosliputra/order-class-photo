@@ -9,7 +9,7 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import imaging, nextcloud, sheets, backup, printing
+from .. import backup, batches, imaging, nextcloud
 from ..config import settings
 from ..database import audit, db, get_setting, one, query, set_setting
 from ..deps import render
@@ -127,10 +127,10 @@ def event_admin(event_id: int, request: Request):
         sizes = query(conn, "SELECT * FROM sizes WHERE event_id=? ORDER BY sort, price_sen", (event_id,))
         classes = query(conn, "SELECT c.*, (SELECT COUNT(*) FROM photos p WHERE p.class_id=c.id) n FROM classes c WHERE event_id=? ORDER BY school, name", (event_id,))
         nphotos = one(conn, "SELECT COUNT(*) c FROM photos WHERE event_id=?", (event_id,))["c"]
-        session = one(conn, "SELECT * FROM print_sessions WHERE event_id=? AND active=1", (event_id,))
+        bsum = batches.summary(conn, event_id)
     return render(request, "admin/event.html", {
         "event": event, "sizes": sizes, "classes": classes, "nphotos": nphotos,
-        "session": session, "rm": rm, "instances": settings.nc_instances(),
+        "bsum": bsum, "rm": rm, "instances": settings.nc_instances(),
     })
 
 
@@ -253,14 +253,56 @@ def event_import(event_id: int, request: Request, background: BackgroundTasks):
     return RedirectResponse(f"/admin/events/{event_id}?import=started", status_code=303)
 
 
-@router.post("/events/{event_id}/new-session")
-def new_print_session(event_id: int, request: Request):
-    """End the current print session so the next paid order opens a fresh sheet
-    (use after you've cleared the print folder = new session)."""
+# --- print batches -----------------------------------------------------------
+@router.post("/batches/{batch_id}/close")
+def batch_close(batch_id: int, request: Request, background: BackgroundTasks):
+    """Close the batch: arrange its files in Nextcloud (background), next paid
+    orders go into a new batch."""
     with db() as conn:
-        sheets.end_session(conn, event_id)
-        audit(conn, admin_email(request), "print_session_ended", "event", event_id, "")
-    return RedirectResponse(f"/admin/events/{event_id}", status_code=303)
+        b = one(conn, "SELECT * FROM batches WHERE id=?", (batch_id,))
+        ok = batches.start_close(conn, batch_id, admin_email(request))
+    if ok:
+        background.add_task(batches.arrange, batch_id)
+    return RedirectResponse(f"/admin/events/{b['event_id']}?batch={'closing' if ok else 'not_open'}#batches"
+                            if b else "/admin", status_code=303)
+
+
+@router.post("/batches/{batch_id}/arrange")
+def batch_rearrange(batch_id: int, request: Request, background: BackgroundTasks):
+    """Arrange a closed batch again (e.g. after an error, or files were moved)."""
+    with db() as conn:
+        b = one(conn, "SELECT * FROM batches WHERE id=?", (batch_id,))
+        if b and b["status"] != "open":
+            conn.execute("UPDATE batches SET status='closing', error='' WHERE id=?", (batch_id,))
+            audit(conn, admin_email(request), "batch_rearrange", "event", b["event_id"], f"Batch {b['number']}")
+    if b and b["status"] != "open":
+        background.add_task(batches.arrange, batch_id)
+    return RedirectResponse(f"/admin/events/{b['event_id']}?batch=closing#batches" if b else "/admin",
+                            status_code=303)
+
+
+@router.get("/batches/{batch_id}/list.csv")
+def batch_list_csv(batch_id: int):
+    from fastapi.responses import Response
+    with db() as conn:
+        b = one(conn, "SELECT * FROM batches WHERE id=?", (batch_id,))
+        if not b:
+            return Response(status_code=404)
+        data = batches.batch_csv(batches.batch_lines(conn, batch_id), b["number"])
+    return Response(data, media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="senarai-batch-{b["number"]}.csv"'})
+
+
+@router.get("/events/{event_id}/sheet.xlsx")
+def event_sheet(event_id: int):
+    from fastapi.responses import Response
+    with db() as conn:
+        ev = one(conn, "SELECT slug FROM events WHERE id=?", (event_id,))
+        if not ev:
+            return Response(status_code=404)
+        data = batches.build_sheet(conn, event_id)
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="Senarai-Order-{ev["slug"]}.xlsx"'})
 
 
 # --- orders ----------------------------------------------------------------
@@ -271,6 +313,7 @@ def admin_orders(request: Request):
     flagged = request.query_params.get("flagged", "")
     trash = request.query_params.get("view", "") == "trash"
     sql = ["SELECT o.*, e.name event_name, c.email, c.name cust_name,",
+           "(SELECT number FROM batches b WHERE b.id=o.batch_id) batch_no,",
            "(SELECT COUNT(*) FROM receipts r WHERE r.order_id=o.id) n_receipts,",
            "(SELECT r.ocr_note FROM receipts r WHERE r.order_id=o.id ORDER BY r.id DESC LIMIT 1) last_note",
            "FROM orders o",
@@ -315,6 +358,7 @@ def admin_order(order_id: int, request: Request):
         items = query(conn, "SELECT * FROM order_items WHERE order_id=?", (order_id,))
         receipts = query(conn, "SELECT * FROM receipts WHERE order_id=? ORDER BY created_at", (order_id,))
         sizes = query(conn, "SELECT * FROM sizes WHERE event_id=? ORDER BY sort", (order["event_id"],))
+        batch = one(conn, "SELECT * FROM batches WHERE id=?", (order["batch_id"],)) if order["batch_id"] else None
     phone = customer["phone"] if customer else ""
     last_rej = next((r for r in reversed(receipts) if r["rejected"]), None)
     wa = {"rejected": customer_wa_link(order, phone, "rejected", last_rej["reject_reason"]) if last_rej else "",
@@ -323,7 +367,8 @@ def admin_order(order_id: int, request: Request):
           "chat": customer_wa_link(order, phone, "chat")}
     return render(request, "admin/order.html", {
         "order": order, "event": event, "customer": customer, "items": items,
-        "receipts": receipts, "sizes": sizes, "rm": rm, "wa": wa,
+        "receipts": receipts, "sizes": sizes, "rm": rm, "wa": wa, "batch": batch,
+        "batch_link": batches.files_link(batch["folder"]) if batch and batch["folder"] else "",
         "needs_double": _needs_double(order, len(receipts)),
     })
 
@@ -344,6 +389,8 @@ def admin_set_status(order_id: int, request: Request, status: str = Form(...)):
     with db() as conn:
         conn.execute("UPDATE orders SET status=?, updated_at=datetime('now') WHERE id=?", (status, order_id))
         audit(conn, admin_email(request), "order_status", "order", order_id, status)
+        if status == "paid":
+            batches.assign_order(conn, order_id)
     return RedirectResponse(f"/admin/orders/{order_id}", status_code=303)
 
 
@@ -383,17 +430,15 @@ def admin_cancel(order_id: int, request: Request, reason: str = Form("")):
 
 @router.post("/orders/{order_id}/reprint")
 def admin_reprint(order_id: int, request: Request, background: BackgroundTasks):
-    def _job(oid):
-        with db() as conn:
-            try:
-                printing.copy_order_to_print(conn, oid)
-                session_row = sheets.get_or_create_session(conn, one(conn, "SELECT event_id FROM orders WHERE id=?", (oid,))["event_id"])
-                sheets.append_order(conn, oid, session_row)
-            except Exception:  # noqa: BLE001
-                log.exception("reprint failed")
-    background.add_task(_job, order_id)
+    """Arrange this order's batch again (only for a closed batch)."""
     with db() as conn:
-        audit(conn, admin_email(request), "order_reprint", "order", order_id, "")
+        o = one(conn, "SELECT batch_id FROM orders WHERE id=?", (order_id,))
+        b = one(conn, "SELECT * FROM batches WHERE id=?", (o["batch_id"],)) if o and o["batch_id"] else None
+        if b and b["status"] != "open":
+            conn.execute("UPDATE batches SET status='closing', error='' WHERE id=?", (b["id"],))
+            audit(conn, admin_email(request), "batch_rearrange", "order", order_id, f"Batch {b['number']}")
+    if b and b["status"] != "open":
+        background.add_task(batches.arrange, b["id"])
     return RedirectResponse(f"/admin/orders/{order_id}", status_code=303)
 
 

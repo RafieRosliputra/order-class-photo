@@ -39,7 +39,7 @@
 
 <div class="card" style="margin-top:12px">
 <table>
-  <tr><th>Order</th><th>Customer</th><th>Event</th><th>Total</th><th>Paid</th><th>Status</th><th></th></tr>
+  <tr><th>Order</th><th>Customer</th><th>Event</th><th>Total</th><th>Paid</th><th>Status</th><th>Batch</th><th></th></tr>
   {% for o in orders %}
   <tr>
     <td><a href="/admin/orders/{{ o.id }}"><strong>{{ o.order_no }}</strong></a><br><span class="note">{{ o.created_at }}</span>
@@ -49,6 +49,7 @@
     <td>{{ rm(o.total_sen) }}</td>
     <td>{{ rm(o.paid_sen) }}{% if o.paid_sen > o.total_sen %}<br><span class="tag flag">{{ 'refunded' if o.refunded_sen else 'refund ' ~ rm(o.paid_sen - o.total_sen) }}</span>{% endif %}</td>
     <td><span class="tag">{{ o.status }}</span>{% if o.last_note %}<br><span class="note">OCR: {{ o.last_note }}</span>{% endif %}</td>
+    <td>{% if o.batch_no %}<span class="tag">Batch {{ o.batch_no }}</span>{% else %}<span class="note">—</span>{% endif %}</td>
     <td>
       {% if trash %}
         <div class="row" style="gap:6px">
