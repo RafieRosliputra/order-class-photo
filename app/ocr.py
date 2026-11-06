@@ -43,8 +43,8 @@ _AMOUNT_LABELLED = re.compile(
     re.I,
 )
 _REF = re.compile(
-    r"(?:ref(?:erence)?(?:\s*(?:no|id|number))?|transaction\s*(?:id|no)|"
-    r"no\.?\s*rujukan|resit|receipt(?:\s*no)?)\s*[:#]?\s*([A-Za-z0-9\-]{6,30})",
+    r"(?:ref(?:erence)?\.?(?:\s*(?:no|id|number))?|transaction\s*(?:id|no)|"
+    r"no\.?\s*rujukan|resit|receipt(?:\s*no)?)\.?\s*[:#]?\s*([A-Za-z0-9\-]{6,30})",
     re.I,
 )
 _DATE_DMY = re.compile(r"\b([0-3]?\d)[/\-.]([01]?\d)[/\-.](20\d{2})\b")

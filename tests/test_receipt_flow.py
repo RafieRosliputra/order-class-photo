@@ -141,3 +141,20 @@ def test_deleted_orders_are_not_rescanned(monkeypatch):
         orders_service.process_receipt(conn, oid, cust, _png(), "r.png", "image/png")
         conn.execute("UPDATE orders SET deleted_at=datetime('now') WHERE id=?", (oid,))
         assert orders_service.pending_receipt_ids(conn) == []
+
+
+def test_tng_duitnow_ref_with_dot():
+    p = ocr.parse_text("RM 4.00\nPaid\nDuitNow Ref No. 20261106TNGDMYNBO300\nDate/Time 06/11/2026 12:41:10")
+    assert p["receipt_no"] == "20261106TNGDMYNBO300" and p["amount_sen"] == 400
+
+
+def test_same_receipt_twice_counts_once(monkeypatch):
+    res = _good(500, ref=""); res["raw"] = "RM 5.00 Paid same text"
+    _fake_ocr(monkeypatch, res)
+    with db() as conn:
+        oid, cust = _order(conn)
+        orders_service.process_receipt(conn, oid, cust, _png(), "a.png", "image/png")
+        st = orders_service.process_receipt(conn, oid, cust, _png(), "b.png", "image/png", forced=True)
+        rows = [dict(r) for r in conn.execute("SELECT accepted, ocr_note FROM receipts WHERE order_id=? ORDER BY id", (oid,))]
+    assert st["paid_sen"] == 500 and st["status"] == "paid"
+    assert rows[1] == {"accepted": 0, "ocr_note": "duplicate"}

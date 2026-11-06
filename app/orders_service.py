@@ -81,6 +81,12 @@ def _judge(conn, order, ocr: dict, receipt_id: int | None) -> tuple[int, str, bo
     amount = ocr.get("amount_sen")
     if not amount:
         return 0, NOTE_NO_AMOUNT, False
+    # same receipt uploaded twice (identical OCR text) counts once
+    raw = (ocr.get("raw") or "").strip()
+    if raw and one(conn, "SELECT 1 FROM receipts WHERE order_id=? AND id!=? AND accepted=1 "
+                   "AND (ocr_raw=? OR ocr_raw LIKE ?)",
+                   (order["id"], receipt_id or 0, raw, "%\n\n" + raw)):
+        return 0, NOTE_DUPLICATE, True
     ref = ocr.get("receipt_no") or ""
     if ref:
         dup = one(conn, "SELECT 1 FROM receipts WHERE receipt_no=? AND receipt_no!='' AND id!=?",
