@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     # These are defaults; the admin Settings page overrides them (stored in the DB).
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
-    deepseek_model: str = "deepseek-chat"
+    deepseek_model: str = "deepseek-flash"
     deepseek_timeout: int = 25
 
     # Admin notifications (paid / needs-review emails)

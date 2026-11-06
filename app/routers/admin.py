@@ -475,7 +475,7 @@ def settings_page(request: Request):
 
 @router.post("/settings")
 def settings_save(request: Request, background: BackgroundTasks,
-                  deepseek_api_key: str = Form(""), deepseek_model: str = Form("deepseek-chat"),
+                  deepseek_api_key: str = Form(""), deepseek_model: str = Form("deepseek-flash"),
                   deepseek_base_url: str = Form("https://api.deepseek.com"),
                   admin_notify_email: str = Form(""), clear_key: str = Form("")):
     with db() as conn:
@@ -483,7 +483,7 @@ def settings_save(request: Request, background: BackgroundTasks,
             set_setting(conn, "deepseek_api_key", "")
         elif deepseek_api_key.strip():
             set_setting(conn, "deepseek_api_key", deepseek_api_key.strip())
-        set_setting(conn, "deepseek_model", deepseek_model.strip() or "deepseek-chat")
+        set_setting(conn, "deepseek_model", deepseek_model.strip() or "deepseek-flash")
         set_setting(conn, "deepseek_base_url", deepseek_base_url.strip() or "https://api.deepseek.com")
         set_setting(conn, "admin_notify_email", admin_notify_email.strip())
         audit(conn, admin_email(request), "settings_saved", "system", "",

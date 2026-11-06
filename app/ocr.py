@@ -204,7 +204,7 @@ def ai_parse(text: str, cfg: dict) -> dict | None:
 
     url = cfg["base_url"].rstrip("/") + "/chat/completions"
     body = {
-        "model": cfg.get("model") or "deepseek-chat",
+        "model": cfg.get("model") or "deepseek-flash",
         "temperature": 0,
         "response_format": {"type": "json_object"},
         "messages": [
