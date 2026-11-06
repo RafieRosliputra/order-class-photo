@@ -158,3 +158,17 @@ def test_same_receipt_twice_counts_once(monkeypatch):
         rows = [dict(r) for r in conn.execute("SELECT accepted, ocr_note FROM receipts WHERE order_id=? ORDER BY id", (oid,))]
     assert st["paid_sen"] == 500 and st["status"] == "paid"
     assert rows[1] == {"accepted": 0, "ocr_note": "duplicate"}
+
+
+def test_rerun_first_copy_is_not_duplicate_of_later_copy(monkeypatch):
+    res = _good(500, ref="REF12345678")
+    _fake_ocr(monkeypatch, res)
+    with db() as conn:
+        oid, cust = _order(conn)
+        orders_service.process_receipt(conn, oid, cust, _png(), "a.png", "image/png")
+        orders_service.process_receipt(conn, oid, cust, _png(), "b.png", "image/png", forced=True)
+        ids = [r["id"] for r in conn.execute("SELECT id FROM receipts WHERE order_id=? ORDER BY id", (oid,))]
+        orders_service.rerun_receipt(conn, ids[1])
+        st = orders_service.rerun_receipt(conn, ids[0])
+        notes = [r["ocr_note"] for r in conn.execute("SELECT ocr_note FROM receipts ORDER BY id")]
+    assert notes == ["match", "duplicate"] and st["paid_sen"] == 500

@@ -89,8 +89,11 @@ def _judge(conn, order, ocr: dict, receipt_id: int | None) -> tuple[int, str, bo
         return 0, NOTE_DUPLICATE, True
     ref = ocr.get("receipt_no") or ""
     if ref:
-        dup = one(conn, "SELECT 1 FROM receipts WHERE receipt_no=? AND receipt_no!='' AND id!=?",
-                  (ref, receipt_id or 0))
+        # only an EARLIER or ACCEPTED receipt makes this one a duplicate, so
+        # re-checking the first copy never trips over a later rejected copy
+        rid = receipt_id or 0
+        dup = one(conn, "SELECT 1 FROM receipts WHERE receipt_no=? AND receipt_no!='' AND id!=? "
+                  "AND (accepted=1 OR id<? OR ?=0)", (ref, rid, rid, rid))
         if dup:
             return 0, NOTE_DUPLICATE, True
     rdate = ocr.get("receipt_date") or ""
