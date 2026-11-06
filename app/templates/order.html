@@ -76,7 +76,7 @@
   </div>
   {% endif %}
 
-  <form method="post" action="/order/{{ order.order_no }}/receipt" enctype="multipart/form-data" class="stack">
+  <form method="post" action="/order/{{ order.order_no }}/receipt" enctype="multipart/form-data" class="stack" id="receipt-form">
     <label for="files">{{ t('upload_receipt') }}</label>
     <input id="files" name="files" type="file" accept="image/png,image/jpeg,application/pdf" multiple required>
     <span class="note">{{ t('receipt_hint') }}</span>
@@ -170,7 +170,23 @@
 </div>
 {% endif %}
 
+<div class="chk-overlay" id="chk" hidden role="alertdialog" aria-modal="true" aria-labelledby="chk-title" aria-live="polite">
+  <div class="chk-card">
+    <div class="chk-spinner" aria-hidden="true"></div>
+    <h2 id="chk-title">{{ t('chk_title') }}</h2>
+    <div class="chk-amount">{{ rm(balance_sen if order.paid_sen else order.total_sen) }} · {{ order.order_no }}</div>
+    <div class="chk-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="chk-fill"></span></div>
+    <ol class="chk-steps">
+      <li data-at="0">{{ t('chk_s1') }}</li>
+      <li data-at="25">{{ t('chk_s2') }}</li>
+      <li data-at="55">{{ t('chk_s3') }}</li>
+      <li data-at="85">{{ t('chk_s4') }}</li>
+    </ol>
+    <p class="note">{{ t('chk_wait') }}</p>
+  </div>
+</div>
+
 {% set help_href = wa %}
 <div style="margin-top:16px">{% include "_help.html" %}</div>
 {% endblock %}
-{% block scripts %}<script>window.__wa="{{ wa }}";</script><script src="/static/js/cart.js?v=20261102c" defer></script>{% endblock %}
+{% block scripts %}<script>window.__wa="{{ wa }}";</script><script src="/static/js/cart.js?v=20261102c" defer></script><script src="/static/js/receipt.js?v=20261106b" defer></script>{% endblock %}
