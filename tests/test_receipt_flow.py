@@ -212,3 +212,55 @@ def test_ai_parse_sends_image_and_retries_without_json_mode(monkeypatch, tmp_pat
     assert calls[0]["model"] == "deepseek-flash"
     assert user[1]["type"] == "image_url" and user[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
     assert len(calls) == 2 and data["amount"] == "4.00" and data["_vision"] is True
+
+
+def test_reject_sends_order_back_to_awaiting_payment(monkeypatch):
+    _fake_ocr(monkeypatch, _good(300))                       # RM3 on a RM5 order
+    with db() as conn:
+        oid, cust = _order(conn)
+        orders_service.process_receipt(conn, oid, cust, _png(), "r.png", "image/png")
+        rid = one(conn, "SELECT id FROM receipts WHERE order_id=?", (oid,))["id"]
+        st = orders_service.reject_receipt(conn, rid, "Amaun RM3, order RM5", "admin@x")
+        r = one(conn, "SELECT * FROM receipts WHERE id=?", (rid,))
+        o = one(conn, "SELECT * FROM orders WHERE id=?", (oid,))
+        assert st["status"] == "awaiting_payment" and o["paid_sen"] == 0
+        assert r["rejected"] == 1 and r["accepted"] == 0 and r["reject_reason"] == "Amaun RM3, order RM5"
+        # rejected receipts don't lock editing and are never re-scanned or revived
+
+
+def test_rejected_receipt_stays_rejected_after_rerun(monkeypatch):
+    _fake_ocr(monkeypatch, _good(300, ref="R1234567"))
+    with db() as conn:
+        oid, cust = _order(conn)
+        orders_service.process_receipt(conn, oid, cust, _png(), "r.png", "image/png")
+        rid = one(conn, "SELECT id FROM receipts WHERE order_id=?", (oid,))["id"]
+        orders_service.reject_receipt(conn, rid, "x", "admin")
+        assert orders_service.pending_receipt_ids(conn) == []
+        _fake_ocr(monkeypatch, _good(500, ref="R1234567"))
+        orders_service.rerun_receipt(conn, rid)
+        assert one(conn, "SELECT accepted FROM receipts WHERE id=?", (rid,))["accepted"] == 0
+        assert one(conn, "SELECT status FROM orders WHERE id=?", (oid,))["status"] == "awaiting_payment"
+
+
+def test_refund_and_paid_amount_kept(monkeypatch):
+    _fake_ocr(monkeypatch, _good(800))                       # RM8 on a RM5 order
+    with db() as conn:
+        oid, cust = _order(conn)
+        st = orders_service.process_receipt(conn, oid, cust, _png(), "r.png", "image/png")
+        assert st["status"] == "reviewing" and st["overpaid"]
+        conn.execute("UPDATE orders SET status='paid', paid_sen=MAX(paid_sen,total_sen) WHERE id=?", (oid,))
+        assert orders_service.mark_refunded(conn, oid, "admin") == 300
+        o = one(conn, "SELECT * FROM orders WHERE id=?", (oid,))
+        assert o["refunded_sen"] == 300 and o["refunded_at"]
+        # a later recompute never lowers an admin-confirmed paid amount
+        orders_service._reconcile_payment(conn, oid)
+        assert one(conn, "SELECT paid_sen FROM orders WHERE id=?", (oid,))["paid_sen"] == 800
+
+
+def test_whatsapp_links():
+    with db() as conn:
+        oid, cust = _order(conn)
+        conn.execute("UPDATE orders SET paid_sen=300, phone_used='012-798 3745' WHERE id=?", (oid,))
+        o = one(conn, "SELECT * FROM orders WHERE id=?", (oid,))
+    link = orders_service.customer_wa_link(o, "", "balance")
+    assert link.startswith("https://wa.me/60127983745?text=") and "RM2.00" in __import__("urllib.parse").parse.unquote(link)

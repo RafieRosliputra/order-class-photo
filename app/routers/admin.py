@@ -14,7 +14,9 @@ from ..config import settings
 from ..database import audit, db, get_setting, one, query, set_setting
 from ..deps import render
 from ..pricing import compute_order_totals
-from ..orders_service import after_receipt, pending_receipt_ids, rerun_receipt, rescan_pending
+from ..email_send import send_receipt_rejected
+from ..orders_service import (after_receipt, customer_wa_link, mark_refunded, pending_receipt_ids,
+                              reject_receipt, rerun_receipt, rescan_pending)
 from ..utils import clean_pickup_text, rm, split_school_class, to_sen, unique_slug
 
 log = logging.getLogger("admin")
@@ -280,7 +282,9 @@ def admin_orders(request: Request):
     if event_id:
         sql.append("AND o.event_id=?"); params.append(event_id)
     if flagged:
-        sql.append("AND o.id IN (SELECT order_id FROM receipts WHERE duplicate=1 OR ocr_status='failed' OR forced=1)")
+        sql.append("AND (o.id IN (SELECT order_id FROM receipts WHERE rejected=0 AND "
+                   "(accepted=0 OR duplicate=1 OR forced=1 OR ocr_note IN ('partial','over'))) "
+                   "OR (o.paid_sen > o.total_sen AND o.refunded_sen=0))")
     sql.append("ORDER BY o.deleted_at DESC" if trash else "ORDER BY o.created_at DESC")
     sql.append("LIMIT 500")
     with db() as conn:
@@ -288,9 +292,15 @@ def admin_orders(request: Request):
         events = query(conn, "SELECT id, name FROM events ORDER BY name")
         n_trash = one(conn, "SELECT COUNT(*) c FROM orders WHERE deleted_at IS NOT NULL")["c"]
         n_pending = len(pending_receipt_ids(conn))
+        n_check = one(conn, """SELECT COUNT(*) c FROM receipts r JOIN orders o ON o.id=r.order_id
+                               WHERE o.deleted_at IS NULL AND o.status='reviewing'
+                                 AND r.rejected=0 AND r.accepted=0""")["c"]
+        n_refund = one(conn, """SELECT COUNT(*) c FROM orders WHERE deleted_at IS NULL
+                                AND paid_sen > total_sen AND refunded_sen=0
+                                AND status IN ('paid','printing','ready','reviewing')""")["c"]
     return render(request, "admin/orders.html",
                   {"orders": orders, "events": events, "rm": rm, "trash": trash,
-                   "n_trash": n_trash, "n_pending": n_pending, "protected": PROTECTED_STATUSES,
+                   "n_trash": n_trash, "n_pending": n_pending, "n_check": n_check, "n_refund": n_refund, "protected": PROTECTED_STATUSES,
                    "f_status": status, "f_event": event_id, "f_flagged": flagged})
 
 
@@ -305,9 +315,15 @@ def admin_order(order_id: int, request: Request):
         items = query(conn, "SELECT * FROM order_items WHERE order_id=?", (order_id,))
         receipts = query(conn, "SELECT * FROM receipts WHERE order_id=? ORDER BY created_at", (order_id,))
         sizes = query(conn, "SELECT * FROM sizes WHERE event_id=? ORDER BY sort", (order["event_id"],))
+    phone = customer["phone"] if customer else ""
+    last_rej = next((r for r in reversed(receipts) if r["rejected"]), None)
+    wa = {"rejected": customer_wa_link(order, phone, "rejected", last_rej["reject_reason"]) if last_rej else "",
+          "balance": customer_wa_link(order, phone, "balance") if 0 < order["paid_sen"] < order["total_sen"] else "",
+          "refund": customer_wa_link(order, phone, "refund") if order["paid_sen"] > order["total_sen"] else "",
+          "chat": customer_wa_link(order, phone, "chat")}
     return render(request, "admin/order.html", {
         "order": order, "event": event, "customer": customer, "items": items,
-        "receipts": receipts, "sizes": sizes, "rm": rm,
+        "receipts": receipts, "sizes": sizes, "rm": rm, "wa": wa,
         "needs_double": _needs_double(order, len(receipts)),
     })
 
@@ -316,7 +332,8 @@ def admin_order(order_id: int, request: Request):
 def admin_mark_paid(order_id: int, request: Request, background: BackgroundTasks):
     from ..orders_service import finalize_payment
     with db() as conn:
-        conn.execute("UPDATE orders SET status='paid', updated_at=datetime('now') WHERE id=?", (order_id,))
+        conn.execute("UPDATE orders SET status='paid', paid_sen=MAX(paid_sen, total_sen), "
+                     "updated_at=datetime('now') WHERE id=?", (order_id,))
         audit(conn, admin_email(request), "order_marked_paid", "order", order_id, "")
     background.add_task(finalize_payment, order_id)
     return RedirectResponse(f"/admin/orders/{order_id}", status_code=303)
@@ -452,6 +469,38 @@ def admin_rescan(request: Request, background: BackgroundTasks):
     with db() as conn:
         audit(conn, admin_email(request), "receipt_rescan_all", "system", "", "")
     return RedirectResponse("/admin/orders?rescan=started", status_code=303)
+
+
+@router.post("/receipts/{receipt_id}/reject")
+def admin_reject_receipt(receipt_id: int, request: Request, background: BackgroundTasks,
+                         reason: str = Form(...)):
+    reason = reason.strip()
+    with db() as conn:
+        r = one(conn, "SELECT order_id FROM receipts WHERE id=?", (receipt_id,))
+        if not r or not reason:
+            return RedirectResponse(f"/admin/orders/{r['order_id']}?reject_error=1" if r else "/admin/orders",
+                                    status_code=303)
+        state = reject_receipt(conn, receipt_id, reason, admin_email(request))
+        o = one(conn, "SELECT o.*, c.email FROM orders o JOIN customers c ON c.id=o.customer_id WHERE o.id=?",
+                (state["order_id"],))
+    due = max(0, o["total_sen"] - o["paid_sen"])
+    background.add_task(_safe_mail, send_receipt_rejected, o["email"], o["order_no"], reason, due,
+                        f"{settings.base_url}/order/{o['order_no']}")
+    return RedirectResponse(f"/admin/orders/{o['id']}?rejected=1", status_code=303)
+
+
+@router.post("/orders/{order_id}/refunded")
+def admin_refunded(order_id: int, request: Request):
+    with db() as conn:
+        mark_refunded(conn, order_id, admin_email(request))
+    return RedirectResponse(f"/admin/orders/{order_id}", status_code=303)
+
+
+def _safe_mail(fn, *args) -> None:
+    try:
+        fn(*args)
+    except Exception:  # noqa: BLE001
+        log.exception("email failed: %s", getattr(fn, "__name__", fn))
 
 
 # --- settings (DeepSeek API, notify email) ------------------------------------

@@ -13,7 +13,7 @@ from .database import audit, db, get_setting, one, query
 from .email_send import send_admin_notice, send_payment_confirmed
 from .ocr import ai_config, run_ocr
 from .pricing import compute_order_totals, postage_for
-from .utils import local_now, next_order_no
+from .utils import local_now, next_order_no, rm
 
 log = logging.getLogger("orders")
 
@@ -108,7 +108,7 @@ def _judge(conn, order, ocr: dict, receipt_id: int | None) -> tuple[int, str, bo
         except ValueError:
             pass
     already = one(conn, "SELECT COALESCE(SUM(amount_sen),0) s FROM receipts WHERE order_id=? "
-                  "AND accepted=1 AND id!=?", (order["id"], receipt_id or 0))["s"]
+                  "AND accepted=1 AND rejected=0 AND id!=?", (order["id"], receipt_id or 0))["s"]
     due = order["total_sen"] - already
     if amount == due:
         return 1, NOTE_MATCH, False
@@ -185,6 +185,8 @@ def rerun_receipt(conn, receipt_id: int) -> dict | None:
     mime = "application/pdf" if data[:5] == b"%PDF-" else "image/png"
     ocr = _ocr_bytes(conn, data, mime)
     accepted, note, duplicate = _judge(conn, order, ocr, receipt_id)
+    if r["rejected"]:
+        accepted = 0
     _store_ocr(conn, receipt_id, ocr, accepted, note, duplicate)
     audit(conn, "system", "receipt_ocr_rerun", "order", order["id"],
           f"{note} {ocr.get('engine', '')} {ocr.get('amount_sen')}".strip())
@@ -199,7 +201,7 @@ def pending_receipt_ids(conn, only_unchecked: bool = False) -> list[int]:
     extra = "AND r.ocr_checked_at IS NULL" if only_unchecked else ""
     rows = query(conn, f"""SELECT r.id FROM receipts r JOIN orders o ON o.id=r.order_id
                           WHERE o.deleted_at IS NULL AND o.status IN ('awaiting_payment','reviewing')
-                            AND r.accepted=0 AND r.duplicate=0
+                            AND r.accepted=0 AND r.duplicate=0 AND r.rejected=0
                             AND r.ocr_status IN ('failed','pending') {extra}
                           ORDER BY r.id""")
     return [r["id"] for r in rows]
@@ -250,20 +252,25 @@ def notify_admin(order_id: int, kind: str) -> None:
 
 def _reconcile_payment(conn, order_id) -> dict:
     """Recompute paid total; auto-mark paid only on an EXACT match.
-    Any receipt that is not an exact match moves the order to 'reviewing'."""
+    A receipt that is not an exact match moves the order to 'reviewing';
+    once every receipt is rejected it goes back to 'awaiting_payment'."""
     order = one(conn, "SELECT * FROM orders WHERE id=?", (order_id,))
     total = order["total_sen"]
-    rows = query(conn, "SELECT amount_sen FROM receipts WHERE order_id=? AND accepted=1", (order_id,))
+    rows = query(conn, "SELECT amount_sen FROM receipts WHERE order_id=? AND accepted=1 AND rejected=0",
+                 (order_id,))
     paid = sum(int(r["amount_sen"] or 0) for r in rows)
-    has_receipt = bool(one(conn, "SELECT 1 FROM receipts WHERE order_id=?", (order_id,)))
+    open_receipt = bool(one(conn, "SELECT 1 FROM receipts WHERE order_id=? AND rejected=0", (order_id,)))
 
     status = order["status"]
-    overpaid = paid > total
-    if order["status"] not in ("paid", "printing", "ready", "cancelled"):
+    if status in ("paid", "printing", "ready"):
+        paid = max(paid, order["paid_sen"])   # keep an admin-confirmed amount
+    elif status != "cancelled":
         if paid == total and paid > 0:
             status = "paid"
-        elif paid > 0 or has_receipt:
+        elif paid > 0 or open_receipt:
             status = "reviewing"   # partial, overpaid or unreadable -> needs attention
+        else:
+            status = "awaiting_payment"
     conn.execute(
         "UPDATE orders SET paid_sen=?, status=?, updated_at=datetime('now') WHERE id=?",
         (paid, status, order_id),
@@ -272,9 +279,56 @@ def _reconcile_payment(conn, order_id) -> dict:
         audit(conn, "system", "order_paid", "order", order_id, f"{paid}sen")
     return {
         "status": status, "paid_sen": paid, "total_sen": total,
-        "balance_sen": max(0, total - paid), "overpaid": overpaid,
+        "balance_sen": max(0, total - paid), "overpaid": paid > total,
         "just_paid": status == "paid" and order["status"] != "paid",
     }
+
+
+def reject_receipt(conn, receipt_id: int, reason: str, actor: str) -> dict | None:
+    """Admin rejects a receipt: it stops counting, the customer sees the reason."""
+    r = one(conn, "SELECT * FROM receipts WHERE id=?", (receipt_id,))
+    if not r:
+        return None
+    conn.execute("UPDATE receipts SET rejected=1, accepted=0, reject_reason=?, rejected_at=datetime('now') "
+                 "WHERE id=?", (reason.strip()[:500], receipt_id))
+    audit(conn, actor, "receipt_rejected", "order", r["order_id"], f"#{receipt_id}: {reason.strip()[:200]}")
+    state = _reconcile_payment(conn, r["order_id"])
+    state["order_id"] = r["order_id"]
+    return state
+
+
+def mark_refunded(conn, order_id: int, actor: str) -> int:
+    """Record that the overpaid part was returned. Returns the amount (sen)."""
+    o = one(conn, "SELECT * FROM orders WHERE id=?", (order_id,))
+    extra = (o["paid_sen"] - o["total_sen"]) if o else 0
+    if extra <= 0:
+        return 0
+    conn.execute("UPDATE orders SET refunded_sen=?, refunded_at=datetime('now') WHERE id=?", (extra, order_id))
+    audit(conn, actor, "order_refunded", "order", order_id, f"{extra}sen")
+    return extra
+
+
+def customer_wa_link(order, cust_phone: str, kind: str, reason: str = "") -> str:
+    """WhatsApp chat with the customer, message pre-written for the admin to send."""
+    from urllib.parse import quote
+    digits = "".join(ch for ch in (order["phone_used"] or cust_phone or "") if ch.isdigit())
+    if digits.startswith("0"):
+        digits = "6" + digits
+    url = f"{settings.base_url}/order/{order['order_no']}"
+    total, paid = order["total_sen"], order["paid_sen"]
+    if kind == "rejected":
+        body = (f"Salam, ini JohorStudio.com. Resit untuk order {order['order_no']} tidak dapat diterima: "
+                f"{reason}. Mohon upload resit yang betul di {url} . Terima kasih.")
+    elif kind == "balance":
+        body = (f"Salam, ini JohorStudio.com. Untuk order {order['order_no']}, kami terima {rm(paid)} "
+                f"daripada {rm(total)}. Baki {rm(total - paid)} boleh dibayar dan resitnya di-upload di {url} . Terima kasih.")
+    elif kind == "refund":
+        body = (f"Salam, ini JohorStudio.com. Untuk order {order['order_no']}, bayaran anda {rm(paid)} "
+                f"melebihi jumlah {rm(total)}. Kami akan pulangkan {rm(paid - total)}. "
+                f"Boleh beri no. akaun bank / DuitNow untuk pemulangan? Terima kasih.")
+    else:
+        body = f"Salam, ini JohorStudio.com berkenaan order {order['order_no']}: {url}"
+    return f"https://wa.me/{digits}?text={quote(body)}" if digits else ""
 
 
 # --- finalisation (run in background after a successful payment) -----------

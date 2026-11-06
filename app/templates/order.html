@@ -26,6 +26,13 @@
 </div>
 {% endif %}
 
+{% if order.paid_sen > order.total_sen %}
+<div class="card" style="border-color:{{ 'var(--ok)' if order.refunded_sen else 'var(--warn)' }}">
+  {% if order.refunded_sen %}<span class="ok">{{ t('refunded_note')|replace('{amt}', rm(order.refunded_sen))|replace('{date}', (order.refunded_at or '')[:10]) }}</span>
+  {% else %}<span>{{ t('overpaid_amount')|replace('{amt}', rm(order.paid_sen - order.total_sen)) }}</span>{% endif %}
+</div>
+{% endif %}
+
 <!-- payment -->
 {% if order.status not in ['paid','printing','ready','cancelled'] %}
 <div class="card stack">
@@ -33,7 +40,6 @@
   <div class="spread"><span class="muted">{{ t('total') }}</span><span class="amount-big">{{ rm(order.total_sen) }}</span></div>
   {% if order.paid_sen %}<div class="spread"><span class="muted">{{ t('paid_so_far') }}</span><strong>{{ rm(order.paid_sen) }}</strong></div>
   <div class="spread"><span class="muted">{{ t('balance_due') }}</span><strong class="error">{{ rm(balance_sen) }}</strong></div>{% endif %}
-  {% if overpaid %}<p class="error">{{ t('overpaid_note') }}</p>{% endif %}
 
   <div class="pay-method">
     <strong>{{ t('pay_qrpay') }}{% if duitnow_on %} — DuitNow QR{% endif %}</strong>
@@ -161,9 +167,14 @@
     <div>{{ r.orig_filename }}</div>
     <div class="note">{{ t('ocr_detected') }}: <strong>{{ rm(r.amount_sen) if r.amount_sen else '—' }}</strong>
       · {{ r.receipt_no or '—' }} · {{ r.created_at }}{% if r.accepted %} <span class="tag">✓</span>{% endif %}</div>
+    {% if r.rejected %}
+    <div class="ocr-fb warn" style="border-left-color:var(--err)"><strong>{{ t('rcpt_rejected') }}:</strong> {{ r.reject_reason }}
+      {% if order.status == 'awaiting_payment' %}<br><span class="note">{{ t('rcpt_rejected_hint') }}</span>{% endif %}</div>
+    {% else %}
     {% set good = r.ocr_note == 'match' %}
     {% if r.ocr_note or not r.accepted %}
     <div class="ocr-fb {{ 'good' if good else 'warn' }}">{{ t('ocr_note_' ~ (r.ocr_note or '')) }}</div>
+    {% endif %}
     {% endif %}
   </div></div>
   {% endfor %}

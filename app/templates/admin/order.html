@@ -7,6 +7,8 @@
   <form method="post" action="/admin/orders/{{ order.id }}/restore" style="margin:0"><button class="btn sm">Restore</button></form></div>
 {% endif %}
 {% if request.query_params.get('need_confirm') %}<div class="card" style="border-color:var(--err)"><span class="error">Not deleted: this order needs the second confirmation.</span></div>{% endif %}
+{% if request.query_params.get('rejected') %}<div class="card" style="border-color:var(--ok)"><span class="ok">Receipt rejected. The customer was emailed the reason{% if wa.rejected %} — you can also <a href="{{ wa.rejected }}" target="_blank" rel="noopener">send it on WhatsApp</a>{% endif %}.</span></div>{% endif %}
+{% if request.query_params.get('reject_error') %}<div class="card" style="border-color:var(--err)"><span class="error">Write a reason to reject the receipt.</span></div>{% endif %}
 {% if request.query_params.get('rerun') %}<div class="card" style="border-color:var(--ok)"><span class="ok">OCR re-run: {{ request.query_params.get('rerun') }}</span></div>{% endif %}
 
 <div class="grid2">
@@ -32,6 +34,25 @@
     </table>
     <div class="spread"><strong>Total</strong><strong>{{ rm(order.total_sen) }}</strong></div>
     <div class="spread"><span class="muted">Paid</span><span>{{ rm(order.paid_sen) }}</span></div>
+    {% if order.paid_sen and order.paid_sen < order.total_sen %}
+    <div class="spread"><span class="muted">Balance due</span><strong class="error">{{ rm(order.total_sen - order.paid_sen) }}</strong></div>
+    {% endif %}
+    {% if order.paid_sen > order.total_sen %}
+    <div class="ocr-fb {{ 'good' if order.refunded_sen else 'warn' }}">
+      {% if order.refunded_sen %}Refunded <strong>{{ rm(order.refunded_sen) }}</strong> on {{ order.refunded_at }}.
+      {% else %}Overpaid — <strong>refund {{ rm(order.paid_sen - order.total_sen) }}</strong> to the customer.
+        <form method="post" action="/admin/orders/{{ order.id }}/refunded" style="margin-top:8px"
+              data-confirm="Mark {{ rm(order.paid_sen - order.total_sen) }} as refunded to the customer?">
+          <button class="btn sm">Dah pulangkan (refunded)</button></form>
+      {% endif %}
+    </div>
+    {% endif %}
+    <div class="stack" style="margin-top:8px">
+      {% if wa.balance %}<a class="btn wa sm" href="{{ wa.balance }}" target="_blank" rel="noopener">WhatsApp: ask for balance {{ rm(order.total_sen - order.paid_sen) }}</a>{% endif %}
+      {% if wa.refund and not order.refunded_sen %}<a class="btn wa sm" href="{{ wa.refund }}" target="_blank" rel="noopener">WhatsApp: ask bank details for refund</a>{% endif %}
+      {% if wa.rejected and order.status == 'awaiting_payment' %}<a class="btn wa sm" href="{{ wa.rejected }}" target="_blank" rel="noopener">WhatsApp: send reject reason</a>{% endif %}
+      {% if wa.chat %}<a class="btn ghost sm" href="{{ wa.chat }}" target="_blank" rel="noopener">WhatsApp customer</a>{% endif %}
+    </div>
   </div>
 
   <div class="stack">
@@ -68,7 +89,20 @@
           <div class="ocr-fb {{ 'good' if r.ocr_note=='match' else 'warn' }}">OCR: <strong>{{ r.ocr_note or r.ocr_status }}</strong>
             {% if r.ocr_engine %}<span class="note">({{ r.ocr_engine }}{% if r.ocr_checked_at %}, {{ r.ocr_checked_at }}{% endif %})</span>{% endif %}</div>
           <details class="ocr-raw"><summary>OCR text</summary><pre>{{ r.ocr_raw }}</pre></details>
+          {% if r.rejected %}
+          <div class="ocr-fb warn" style="border-left-color:var(--err)"><strong>Rejected</strong> {{ r.rejected_at }} — {{ r.reject_reason }}</div>
+          {% else %}
           <form method="post" action="/admin/receipts/{{ r.id }}/rerun" style="margin-top:6px"><button class="btn ghost sm">Run OCR again</button></form>
+          {% if order.status in ['awaiting_payment','reviewing'] %}
+          <details style="margin-top:6px"><summary class="note" style="cursor:pointer">Reject this receipt…</summary>
+            <form method="post" action="/admin/receipts/{{ r.id }}/reject" class="stack" style="margin-top:6px"
+                  data-confirm="Reject this receipt? The customer is emailed the reason and the order goes back to awaiting payment.">
+              <textarea name="reason" rows="2" required placeholder="Reason the customer will see, e.g. Amount is RM3.00, order is RM4.00"></textarea>
+              <button class="btn danger sm">Reject receipt</button>
+            </form>
+          </details>
+          {% endif %}
+          {% endif %}
         </div>
       </div>
       {% endfor %}

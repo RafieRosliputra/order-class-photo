@@ -14,6 +14,12 @@
 {% if request.query_params.get('rescan') %}<div class="card" style="border-color:var(--ok)"><span class="ok">Re-checking receipts in the background. Refresh in a minute.</span></div>{% endif %}
 
 {% if not trash %}
+{% if n_check or n_refund %}
+<div class="card spread" style="border-color:var(--warn);margin-top:8px">
+  <span>{% if n_check %}{{ n_check }} receipt(s) need checking.{% endif %}{% if n_refund %} {{ n_refund }} order(s) to refund.{% endif %}</span>
+  <a class="btn sm" href="/admin/orders?flagged=1">Show</a>
+</div>
+{% endif %}
 {% if n_pending %}
 <div class="card spread" style="border-color:var(--warn);margin-top:8px">
   <span>{{ n_pending }} receipt(s) not verified yet.</span>
@@ -41,7 +47,7 @@
     <td>{{ o.cust_name or '—' }}<br><span class="note">{{ o.email }} · {{ o.phone_used }}</span></td>
     <td>{{ o.event_name }}</td>
     <td>{{ rm(o.total_sen) }}</td>
-    <td>{{ rm(o.paid_sen) }}</td>
+    <td>{{ rm(o.paid_sen) }}{% if o.paid_sen > o.total_sen %}<br><span class="tag flag">{{ 'refunded' if o.refunded_sen else 'refund ' ~ rm(o.paid_sen - o.total_sen) }}</span>{% endif %}</td>
     <td><span class="tag">{{ o.status }}</span>{% if o.last_note %}<br><span class="note">OCR: {{ o.last_note }}</span>{% endif %}</td>
     <td>
       {% if trash %}

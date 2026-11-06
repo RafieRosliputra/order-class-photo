@@ -233,6 +233,13 @@ def init_db() -> None:
             "ALTER TABLE receipts ADD COLUMN ocr_note TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE receipts ADD COLUMN ocr_engine TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE receipts ADD COLUMN ocr_checked_at TEXT",
+            # admin rejected this receipt (reason shown to the customer)
+            "ALTER TABLE receipts ADD COLUMN rejected INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE receipts ADD COLUMN reject_reason TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE receipts ADD COLUMN rejected_at TEXT",
+            # overpayment returned to the customer
+            "ALTER TABLE orders ADD COLUMN refunded_sen INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE orders ADD COLUMN refunded_at TEXT",
         ):
             try:
                 conn.execute(stmt)

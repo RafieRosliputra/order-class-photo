@@ -79,7 +79,7 @@ def _editable(conn, order) -> bool:
     """Items may change only while awaiting payment and before any receipt."""
     if order["status"] != "awaiting_payment":
         return False
-    return not one(conn, "SELECT 1 FROM receipts WHERE order_id=?", (order["id"],))
+    return not one(conn, "SELECT 1 FROM receipts WHERE order_id=? AND rejected=0", (order["id"],))
 
 
 def _own_editable_order(conn, request: Request, order_no: str):

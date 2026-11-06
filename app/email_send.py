@@ -123,3 +123,18 @@ def send_admin_notice(to: str, kind: str, order, receipt, admin_url: str) -> Non
         + f"</table><p><a href='{escape(admin_url)}'>Buka order di admin</a></p><p>— {BRAND}</p>"
     )
     _send(to, subject, html, text)
+
+
+def send_receipt_rejected(to: str, order_no: str, reason: str, due_sen: int, status_url: str) -> None:
+    subject = f"Resit tidak diterima / Receipt not accepted — {order_no}"
+    html = _env.get_template("receipt_rejected.html").render(
+        order_no=order_no, reason=reason, due=rm(due_sen), status_url=status_url, brand=BRAND,
+    )
+    text = (
+        f"Resit untuk order {order_no} tidak dapat diterima.\nSebab: {reason}\n"
+        f"Sila upload resit yang betul. Jumlah perlu dibayar: {rm(due_sen)}.\n\n"
+        f"The receipt for order {order_no} could not be accepted.\nReason: {reason}\n"
+        f"Please upload the correct receipt. Amount due: {rm(due_sen)}.\n\n"
+        f"{status_url}\n— {BRAND}"
+    )
+    _send(to, subject, html, text)
