@@ -22,6 +22,20 @@
     window.__toastT = setTimeout(function () { t.classList.remove('show'); }, 2600);
   };
 
+  // Confirm before destructive actions. data-confirm = first question;
+  // data-confirm2 = second question (double confirm) — only then the hidden
+  // "confirm2" field gets the order number the server checks.
+  document.addEventListener('submit', function (e) {
+    var f = e.target;
+    if (!f.dataset || !f.dataset.confirm) return;
+    if (!window.confirm(f.dataset.confirm)) { e.preventDefault(); return; }
+    if (f.dataset.confirm2) {
+      if (!window.confirm(f.dataset.confirm2)) { e.preventDefault(); return; }
+      var h = f.querySelector('input[name="confirm2"]');
+      if (h) h.value = f.dataset.orderNo || '';
+    }
+  }, true);
+
   // Checkbox that shows/hides a related box (admin delivery options).
   document.querySelectorAll('input[data-toggle]').forEach(function (cb) {
     var box = document.querySelector(cb.dataset.toggle);

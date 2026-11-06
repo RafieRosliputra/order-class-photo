@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse, Response
 from .. import duitnow
 from ..database import audit, db, one, query
 from ..pricing import compute_order_totals
-from ..deps import current_customer, render
+from ..deps import current_customer, read_cart, render, write_cart
 from ..utils import STATUS_FLOW
 
 router = APIRouter()
@@ -23,7 +23,7 @@ def my_orders(request: Request):
             conn,
             """SELECT o.*, e.name AS event_name, e.slug AS event_slug
                FROM orders o JOIN events e ON e.id=o.event_id
-               WHERE o.customer_id=? ORDER BY o.created_at DESC""",
+               WHERE o.customer_id=? AND o.deleted_at IS NULL ORDER BY o.created_at DESC""",
             (customer["id"],),
         )
     return render(request, "orders.html", {"orders": orders})
@@ -35,7 +35,7 @@ def order_detail(order_no: str, request: Request):
     if not customer:
         return RedirectResponse(f"/login?next=/order/{order_no}", status_code=303)
     with db() as conn:
-        order = one(conn, "SELECT * FROM orders WHERE order_no=?", (order_no,))
+        order = one(conn, "SELECT * FROM orders WHERE order_no=? AND deleted_at IS NULL", (order_no,))
         if not order or order["customer_id"] != customer["id"]:
             return render(request, "not_found.html", {})
         event = one(conn, "SELECT * FROM events WHERE id=?", (order["event_id"],))
@@ -63,7 +63,7 @@ def order_qr(order_no: str, request: Request):
     if not duitnow.is_configured():
         return Response(status_code=404)
     with db() as conn:
-        order = one(conn, "SELECT * FROM orders WHERE order_no=?", (order_no,))
+        order = one(conn, "SELECT * FROM orders WHERE order_no=? AND deleted_at IS NULL", (order_no,))
     if not order or order["customer_id"] != customer["id"]:
         return Response(status_code=404)
     try:
@@ -86,7 +86,7 @@ def _own_editable_order(conn, request: Request, order_no: str):
     customer = current_customer(request)
     if not customer:
         return None, None
-    order = one(conn, "SELECT * FROM orders WHERE order_no=?", (order_no,))
+    order = one(conn, "SELECT * FROM orders WHERE order_no=? AND deleted_at IS NULL", (order_no,))
     if not order or order["customer_id"] != customer["id"] or not _editable(conn, order):
         return None, customer
     return order, customer
@@ -146,3 +146,42 @@ def order_item_remove(order_no: str, item_id: int, request: Request):
         compute_order_totals(conn, order["id"])
         audit(conn, f"customer:{customer['id']}", "order_item_removed", "order", order["id"], str(item_id))
     return _back(order_no)
+
+
+# --- customer: delete an unpaid order, or send it back to the cart ----------
+def _soft_delete(conn, order, actor: str, why: str) -> None:
+    conn.execute("UPDATE orders SET deleted_at=datetime('now'), deleted_by=?, updated_at=datetime('now') "
+                 "WHERE id=?", (actor, order["id"]))
+    audit(conn, actor, "order_deleted", "order", order["id"], f"{order['order_no']} {why}".strip())
+
+
+@router.post("/order/{order_no}/delete")
+def order_delete(order_no: str, request: Request):
+    with db() as conn:
+        order, customer = _own_editable_order(conn, request, order_no)
+        if not order:
+            return _back(order_no, "locked=1")
+        _soft_delete(conn, order, f"customer:{customer['id']}", "by customer")
+    return RedirectResponse("/orders?deleted=1", status_code=303)
+
+
+@router.post("/order/{order_no}/edit")
+def order_back_to_cart(order_no: str, request: Request):
+    """Put the order's photos back in the cart (same sizes/qty) and remove the order,
+    so the customer can add more photos or change things, then check out again."""
+    with db() as conn:
+        order, customer = _own_editable_order(conn, request, order_no)
+        if not order:
+            return _back(order_no, "locked=1")
+        items = query(conn, "SELECT photo_id, size_id, qty FROM order_items WHERE order_id=?", (order["id"],))
+        _soft_delete(conn, order, f"customer:{customer['id']}", "back to cart")
+    eid = order["event_id"]
+    cart = read_cart(request)
+    if any(not k.startswith(f"{eid}:") for k in cart):
+        cart = {}  # the cart holds one event at a time
+    for it in items:
+        key = f"{eid}:{it['photo_id']}:{it['size_id']}"
+        cart[key] = min(int(cart.get(key, 0)) + int(it["qty"]), 20)
+    resp = RedirectResponse("/cart", status_code=303)
+    write_cart(resp, cart)
+    return resp

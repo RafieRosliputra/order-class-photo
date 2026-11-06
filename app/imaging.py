@@ -74,6 +74,21 @@ def receipt_to_webp(data: bytes, mime: str, stem: str) -> Path:
     return out
 
 
+def ocr_source(data: bytes, mime: str, workdir: Path) -> Path:
+    """Full-quality image of the receipt for OCR (PDF -> first page at 200 dpi)."""
+    out = Path(workdir) / "receipt.png"
+    if mime == "application/pdf" or data[:5] == b"%PDF-":
+        from pdf2image import convert_from_bytes
+        pages = convert_from_bytes(data, dpi=200, first_page=1, last_page=1)
+        img = pages[0] if pages else Image.new("RGB", (800, 1000), "white")
+    else:
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    img.save(out, "PNG")
+    return out
+
+
 def trash_original(data: bytes, orig_filename: str, stem: str) -> Path:
     """Keep the original receipt in the trash folder (auto-cleared later)."""
     settings.trash_dir.mkdir(parents=True, exist_ok=True)

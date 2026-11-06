@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
 
 from ..config import settings
 from ..database import db, one
 from ..deps import current_customer, render
-from ..orders_service import finalize_payment, process_receipt
+from ..orders_service import after_receipt, process_receipt
 
 router = APIRouter()
 
@@ -22,13 +23,13 @@ async def upload_receipt(order_no: str, request: Request, background: Background
         return RedirectResponse(f"/login?next=/order/{order_no}", status_code=303)
 
     with db() as conn:
-        order = one(conn, "SELECT * FROM orders WHERE order_no=?", (order_no,))
+        order = one(conn, "SELECT * FROM orders WHERE order_no=? AND deleted_at IS NULL", (order_no,))
         if not order or order["customer_id"] != customer["id"]:
             return render(request, "not_found.html", {})
 
     force = forced == "1"
     duplicate_hit = None
-    paid_now = False
+    last_state = None
     max_bytes = settings.receipt_max_mb * 1024 * 1024
 
     for up in files:
@@ -37,20 +38,27 @@ async def upload_receipt(order_no: str, request: Request, background: Background
         data = await up.read()
         if not data or len(data) > max_bytes:
             continue
-        with db() as conn:
-            res = process_receipt(conn, order["id"], customer["id"], data,
-                                  up.filename or "resit", up.content_type, forced=force)
+        res = await run_in_threadpool(_process, order["id"], customer["id"], data,
+                                      up.filename or "resit", up.content_type, force)
         if res.get("duplicate") and not res.get("ok"):
             duplicate_hit = res.get("receipt_no", "")
             break  # stop; ask customer to confirm
-        if res.get("just_paid"):
-            paid_now = True
+        if res.get("ok"):
+            if last_state and last_state.get("just_paid"):
+                res["just_paid"] = True
+            last_state = res
 
     if duplicate_hit is not None:
         return render(request, "receipt_duplicate.html",
                       {"order_no": order_no, "receipt_no": duplicate_hit})
 
-    if paid_now:
-        background.add_task(finalize_payment, order["id"])
+    if last_state:
+        background.add_task(after_receipt, order["id"], last_state)
 
     return RedirectResponse(f"/order/{order_no}?uploaded=1", status_code=303)
+
+
+def _process(order_id, customer_id, data, filename, mime, forced):
+    """Blocking OCR + DB work, run in a worker thread so other customers aren't held up."""
+    with db() as conn:
+        return process_receipt(conn, order_id, customer_id, data, filename, mime, forced=forced)

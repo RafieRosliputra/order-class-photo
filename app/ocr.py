@@ -1,16 +1,23 @@
-"""Receipt OCR (PaddleOCR) + regex field extraction.
+"""Receipt OCR: Tesseract reads the text, DeepSeek reads the fields (amount,
+reference, date) from that text, regex is the fallback when no API key is set.
 
-`parse_text()` is pure (no PaddleOCR) so it is unit-testable. `run_ocr()` lazily
-loads PaddleOCR; if OCR is disabled or unavailable, callers flag the receipt for
-manual admin review.
+`parse_text()` / `merge_ai()` are pure so they are unit-testable. If no text can
+be read, callers flag the receipt for manual admin review.
 """
 from __future__ import annotations
 
+import json
+import logging
 import re
+import shutil
+import subprocess
+import tempfile
 from datetime import datetime
+from pathlib import Path
 
 from .config import settings
 
+log = logging.getLogger("ocr")
 _paddle = None
 
 BANKS = [
@@ -104,31 +111,165 @@ def _safe_date(y: int, m: int, d: int) -> str:
         return ""
 
 
-def _engine():
+# --- text extraction ---------------------------------------------------------
+def _prepare_png(src: Path, workdir: Path) -> Path:
+    """Grayscale + upscale small screenshots so Tesseract reads digits reliably."""
+    from PIL import Image, ImageOps
+
+    img = Image.open(src)
+    img = ImageOps.exif_transpose(img)
+    img = img.convert("L")
+    if img.width < 1200:
+        f = 1200 / img.width
+        img = img.resize((round(img.width * f), round(img.height * f)), Image.LANCZOS)
+    out = workdir / "ocr.png"
+    img.save(out, "PNG")
+    return out
+
+
+def _tesseract(png: Path) -> str:
+    exe = shutil.which("tesseract")
+    if not exe:
+        raise RuntimeError("tesseract not installed")
+    res = subprocess.run(
+        [exe, str(png), "stdout", "-l", settings.ocr_tesseract_lang or "eng", "--psm", "4"],
+        capture_output=True, text=True, timeout=90,
+    )
+    if res.returncode != 0:
+        raise RuntimeError(f"tesseract: {res.stderr.strip()[:200]}")
+    return res.stdout
+
+
+def _paddle_text(path: Path) -> str:
     global _paddle
     if _paddle is None:
         from paddleocr import PaddleOCR
         _paddle = PaddleOCR(use_angle_cls=True, lang="en", show_log=False)
-    return _paddle
+    lines = []
+    for page in _paddle.ocr(str(path), cls=True) or []:
+        for line in page or []:
+            try:
+                lines.append(line[1][0])
+            except (IndexError, TypeError):
+                continue
+    return "\n".join(lines)
 
 
-def run_ocr(image_path: str) -> dict:
-    """OCR an image file and parse it. Returns parsed dict; ok=False if unavailable."""
-    if not settings.ocr_enabled:
-        return {"ok": False, "reason": "disabled"}
+def extract_text(image_path: str | Path) -> tuple[str, str]:
+    """Return (text, engine). Tesseract first; PaddleOCR only if Tesseract is missing."""
+    src = Path(image_path)
+    with tempfile.TemporaryDirectory() as tmp:
+        png = _prepare_png(src, Path(tmp))
+        try:
+            return _tesseract(png), "tesseract"
+        except RuntimeError as exc:
+            if "not installed" not in str(exc):
+                raise
+        return _paddle_text(png), "paddle"
+
+
+# --- DeepSeek: read fields from OCR text --------------------------------------
+_AI_PROMPT = """You read Malaysian bank / e-wallet payment receipts (DuitNow, QR Pay,
+IBG/Instant Transfer, Maybank2u, CIMB, TNG...). The text below came from OCR and
+may contain errors. Reply with ONE JSON object only:
+{"is_receipt": true/false,          // is this a payment/transfer receipt at all?
+ "status": "successful"|"failed"|"pending"|"unknown",
+ "amount": "12.50" or null,         // the amount TRANSFERRED, digits only, 2 decimals
+ "reference": "..." or "",          // transaction / reference no.
+ "date": "YYYY-MM-DD" or "",
+ "time": "HH:MM" or "",
+ "bank": "..." or "",               // sender's bank / app
+ "recipient": "..." or "",          // recipient name if shown
+ "note": "short reason if anything looks wrong, else empty"}
+Never guess an amount that is not in the text. Ignore balances, fees and limits."""
+
+
+def ai_config(conn=None) -> dict:
+    """DeepSeek settings: admin page (DB) first, env as fallback."""
+    cfg = {"key": settings.deepseek_api_key, "base_url": settings.deepseek_base_url,
+           "model": settings.deepseek_model}
+    if conn is not None:
+        from .database import get_setting
+        cfg["key"] = get_setting(conn, "deepseek_api_key", cfg["key"])
+        cfg["base_url"] = get_setting(conn, "deepseek_base_url", cfg["base_url"])
+        cfg["model"] = get_setting(conn, "deepseek_model", cfg["model"])
+    return cfg
+
+
+def ai_parse(text: str, cfg: dict) -> dict | None:
+    """Ask DeepSeek to read the OCR text. None if not configured or on error."""
+    if not cfg.get("key") or not text.strip():
+        return None
+    import httpx
+
+    url = cfg["base_url"].rstrip("/") + "/chat/completions"
+    body = {
+        "model": cfg.get("model") or "deepseek-chat",
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": _AI_PROMPT},
+            {"role": "user", "content": text[:6000]},
+        ],
+    }
     try:
-        ocr = _engine()
-        res = ocr.ocr(image_path, cls=True)
-        lines = []
-        for page in res or []:
-            for line in page or []:
-                try:
-                    lines.append(line[1][0])
-                except (IndexError, TypeError):
-                    continue
-        text = "\n".join(lines)
-        parsed = parse_text(text)
-        parsed["ok"] = True
-        return parsed
+        r = httpx.post(url, json=body, timeout=settings.deepseek_timeout,
+                       headers={"Authorization": f"Bearer {cfg['key']}"})
+        r.raise_for_status()
+        content = r.json()["choices"][0]["message"]["content"]
+        data = json.loads(content)
+        return data if isinstance(data, dict) else None
+    except Exception as exc:  # noqa: BLE001 - AI is a helper, never fatal
+        log.warning("deepseek parse failed: %s", exc)
+        return None
+
+
+def _amount_in_text(amount_sen: int, text: str) -> bool:
+    """Guard against an AI-invented amount: the figure must appear in the OCR text."""
+    whole, cents = divmod(amount_sen, 100)
+    flat = text.replace(" ", "")
+    forms = {f"{whole}.{cents:02d}", f"{whole:,}.{cents:02d}"}
+    return any(f in flat for f in forms)
+
+
+def merge_ai(parsed: dict, ai: dict | None) -> dict:
+    """Combine regex fields with DeepSeek's reading. Adds is_receipt / txn_status / ai_note."""
+    out = dict(parsed)
+    out.update({"is_receipt": True, "txn_status": "unknown", "ai_note": "", "ai_used": False})
+    if not ai:
+        return out
+    out["ai_used"] = True
+    out["is_receipt"] = bool(ai.get("is_receipt", True))
+    out["txn_status"] = str(ai.get("status") or "unknown").lower()
+    out["ai_note"] = str(ai.get("note") or "")[:300]
+    amt = ai.get("amount")
+    if amt not in (None, ""):
+        try:
+            sen = round(float(str(amt).replace(",", "").replace("RM", "").strip()) * 100)
+            if sen > 0 and _amount_in_text(sen, parsed.get("raw", "")):
+                out["amount_sen"] = sen
+        except ValueError:
+            pass
+    for src, dst in (("reference", "receipt_no"), ("date", "receipt_date"),
+                     ("time", "receipt_time"), ("bank", "bank")):
+        val = str(ai.get(src) or "").strip()
+        if val:
+            out[dst] = val.upper()[:40] if dst == "receipt_no" else val[:40]
+    out["recipient"] = str(ai.get("recipient") or "")[:80]
+    return out
+
+
+def run_ocr(image_path: str, ai_cfg: dict | None = None) -> dict:
+    """OCR an image and read its fields. ok=False if no text could be read."""
+    if not settings.ocr_enabled:
+        return {"ok": False, "reason": "disabled", "engine": ""}
+    try:
+        text, engine = extract_text(image_path)
     except Exception as exc:  # noqa: BLE001 - OCR must never crash the request
-        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}"}
+        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}", "engine": ""}
+    parsed = merge_ai(parse_text(text), ai_parse(text, ai_cfg or ai_config()))
+    parsed["engine"] = engine + ("+deepseek" if parsed["ai_used"] else "")
+    parsed["ok"] = bool(text.strip())
+    if not parsed["ok"]:
+        parsed["reason"] = "no text found"
+    return parsed

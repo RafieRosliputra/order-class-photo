@@ -22,6 +22,14 @@ def _daily_maintenance() -> None:
         log.exception("daily maintenance failed")
 
 
+def _rescan() -> None:
+    from .orders_service import rescan_pending
+    try:
+        rescan_pending()
+    except Exception:  # noqa: BLE001
+        log.exception("receipt rescan failed")
+
+
 def start_scheduler() -> None:
     global _scheduler
     if _scheduler:
@@ -29,6 +37,8 @@ def start_scheduler() -> None:
     _scheduler = BackgroundScheduler(timezone=TZ)
     _scheduler.add_job(_daily_maintenance, CronTrigger(hour=3, minute=30),
                        id="daily_maintenance", replace_existing=True)
+    _scheduler.add_job(_rescan, "interval", minutes=30, id="receipt_rescan",
+                       replace_existing=True)
     _scheduler.start()
     log.info("scheduler started")
 

@@ -47,12 +47,13 @@ def unique_slug(conn, base: str) -> str:
 # --- order numbers: YYYYMMDD-NNN -------------------------------------------
 def next_order_no(conn) -> str:
     prefix = local_now().strftime("%Y%m%d")
+    # MAX (not COUNT) so a purged order never frees its number for reuse
     row = one(
         conn,
-        "SELECT COUNT(*) AS c FROM orders WHERE order_no LIKE ?",
+        "SELECT MAX(CAST(substr(order_no, 10) AS INTEGER)) AS m FROM orders WHERE order_no LIKE ?",
         (f"{prefix}-%",),
     )
-    seq = (row["c"] if row else 0) + 1
+    seq = ((row["m"] if row and row["m"] else 0)) + 1
     return f"{prefix}-{seq:03d}"
 
 

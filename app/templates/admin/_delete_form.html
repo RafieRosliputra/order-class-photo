@@ -1,0 +1,9 @@
+{# expects: o (order row), dbl (bool: needs double confirm), back (url) #}
+<form method="post" action="/admin/orders/{{ o.id }}/delete" style="margin:0"
+      data-order-no="{{ o.order_no }}"
+      data-confirm="Delete order {{ o.order_no }} ({{ o.status }}, {{ rm(o.total_sen) }})? It moves to Trash."
+      {% if dbl %}data-confirm2="SECOND CHECK: {{ o.order_no }} is {{ o.status|upper }}{% if o.paid_sen %} with {{ rm(o.paid_sen) }} paid{% endif %} / has a receipt. Really delete it?"{% endif %}>
+  <input type="hidden" name="confirm2" value="">
+  <input type="hidden" name="back" value="{{ back }}">
+  <button class="btn danger sm" type="submit">Delete</button>
+</form>

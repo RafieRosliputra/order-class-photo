@@ -20,7 +20,10 @@
 </div>
 
 {% if request.query_params.get('uploaded') %}
-<div class="card" style="border-color:var(--ok)"><span class="ok">{% if lang=='ms' %}Resit diterima. Kami sedang semak.{% else %}Receipt received. We're checking it.{% endif %}</span></div>
+<div class="card" style="border-color:{{ 'var(--ok)' if order.status in ['paid','printing','ready'] else 'var(--warn)' }}">
+  {% if order.status in ['paid','printing','ready'] %}<span class="ok">{{ t('uploaded_paid') }}</span>
+  {% else %}<span>{{ t('uploaded_review') }}</span> <a href="#receipts">↓</a>{% endif %}
+</div>
 {% endif %}
 
 <!-- payment -->
@@ -58,6 +61,20 @@
     <div class="bank-no">{{ event.pay_bank_no or settings.pay_bank_account_no or '—' }}</div>
     <div class="note">{{ settings.pay_bank_account_name }}</div>
   </div>
+
+  {% if editable %}
+  <div class="pay-method">
+    <span class="note">{{ t('order_actions_note') }}</span>
+    <div class="order-actions">
+      <form method="post" action="/order/{{ order.order_no }}/edit" data-confirm="{{ t('order_edit_confirm') }}">
+        <button class="btn ghost sm" type="submit">{{ t('order_edit_back') }}</button>
+      </form>
+      <form method="post" action="/order/{{ order.order_no }}/delete" data-confirm="{{ t('order_delete_confirm') }}">
+        <button class="btn danger sm" type="submit">{{ t('order_delete') }}</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
 
   <form method="post" action="/order/{{ order.order_no }}/receipt" enctype="multipart/form-data" class="stack">
     <label for="files">{{ t('upload_receipt') }}</label>
@@ -137,15 +154,17 @@
 
 <!-- receipts history -->
 {% if receipts %}
-<div class="card">
+<div class="card" id="receipts">
   <h2>{% if lang=='ms' %}Resit dihantar{% else %}Receipts sent{% endif %}</h2>
   {% for r in receipts %}
   <div class="line"><div style="flex:1">
     <div>{{ r.orig_filename }}</div>
-    <div class="note">{{ rm(r.amount_sen) if r.amount_sen else '—' }} · {{ r.receipt_no or '—' }} · {{ r.created_at }}
-      {% if r.duplicate %}<span class="tag flag">dup</span>{% endif %}
-      {% if r.ocr_status=='failed' %}<span class="tag flag">OCR?</span>{% endif %}
-      {% if r.accepted %}<span class="tag">✓</span>{% endif %}</div>
+    <div class="note">{{ t('ocr_detected') }}: <strong>{{ rm(r.amount_sen) if r.amount_sen else '—' }}</strong>
+      · {{ r.receipt_no or '—' }} · {{ r.created_at }}{% if r.accepted %} <span class="tag">✓</span>{% endif %}</div>
+    {% set good = r.ocr_note == 'match' %}
+    {% if r.ocr_note or not r.accepted %}
+    <div class="ocr-fb {{ 'good' if good else 'warn' }}">{{ t('ocr_note_' ~ (r.ocr_note or '')) }}</div>
+    {% endif %}
   </div></div>
   {% endfor %}
 </div>

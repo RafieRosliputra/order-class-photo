@@ -3,6 +3,9 @@
 {% block content %}
 <div class="spread"><h1>{{ t('nav_orders') }}</h1>
   <a class="btn ghost sm" href="/logout?next=/">{{ t('nav_logout') }}</a></div>
+{% if request.query_params.get('deleted') %}
+  <div class="card" style="border-color:var(--ok);margin-bottom:12px"><span class="ok">{{ t('order_deleted') }}</span></div>
+{% endif %}
 {% if not orders %}
   <div class="card"><p class="muted">{% if lang=='ms' %}Belum ada order.{% else %}No orders yet.{% endif %}</p></div>
 {% else %}

@@ -11,10 +11,11 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import imaging, nextcloud, sheets, backup, printing
 from ..config import settings
-from ..database import audit, db, one, query
+from ..database import audit, db, get_setting, one, query, set_setting
 from ..deps import render
 from ..pricing import compute_order_totals
-from ..utils import clean_pickup_text, rm, slugify, split_school_class, to_sen, unique_slug
+from ..orders_service import after_receipt, pending_receipt_ids, rerun_receipt, rescan_pending
+from ..utils import clean_pickup_text, rm, split_school_class, to_sen, unique_slug
 
 log = logging.getLogger("admin")
 router = APIRouter(prefix="/admin")
@@ -50,7 +51,7 @@ def dashboard(request: Request):
         events = query(conn, "SELECT * FROM events ORDER BY created_at DESC")
         summary = {}
         for e in events:
-            rows = query(conn, "SELECT status, COUNT(*) c, SUM(paid_sen) paid FROM orders WHERE event_id=? GROUP BY status", (e["id"],))
+            rows = query(conn, "SELECT status, COUNT(*) c, SUM(paid_sen) paid FROM orders WHERE event_id=? AND deleted_at IS NULL GROUP BY status", (e["id"],))
             total_paid = sum((r["paid"] or 0) for r in rows)
             counts = {r["status"]: r["c"] for r in rows}
             summary[e["id"]] = {"counts": counts, "orders": sum(counts.values()), "paid": total_paid}
@@ -266,8 +267,13 @@ def admin_orders(request: Request):
     status = request.query_params.get("status", "")
     event_id = request.query_params.get("event", "")
     flagged = request.query_params.get("flagged", "")
-    sql = ["SELECT o.*, e.name event_name, c.email, c.name cust_name FROM orders o",
-           "JOIN events e ON e.id=o.event_id JOIN customers c ON c.id=o.customer_id WHERE 1=1"]
+    trash = request.query_params.get("view", "") == "trash"
+    sql = ["SELECT o.*, e.name event_name, c.email, c.name cust_name,",
+           "(SELECT COUNT(*) FROM receipts r WHERE r.order_id=o.id) n_receipts,",
+           "(SELECT r.ocr_note FROM receipts r WHERE r.order_id=o.id ORDER BY r.id DESC LIMIT 1) last_note",
+           "FROM orders o",
+           "JOIN events e ON e.id=o.event_id JOIN customers c ON c.id=o.customer_id WHERE 1=1",
+           "AND o.deleted_at IS NOT NULL" if trash else "AND o.deleted_at IS NULL"]
     params: list = []
     if status:
         sql.append("AND o.status=?"); params.append(status)
@@ -275,12 +281,16 @@ def admin_orders(request: Request):
         sql.append("AND o.event_id=?"); params.append(event_id)
     if flagged:
         sql.append("AND o.id IN (SELECT order_id FROM receipts WHERE duplicate=1 OR ocr_status='failed' OR forced=1)")
-    sql.append("ORDER BY o.created_at DESC LIMIT 500")
+    sql.append("ORDER BY o.deleted_at DESC" if trash else "ORDER BY o.created_at DESC")
+    sql.append("LIMIT 500")
     with db() as conn:
         orders = query(conn, " ".join(sql), params)
         events = query(conn, "SELECT id, name FROM events ORDER BY name")
+        n_trash = one(conn, "SELECT COUNT(*) c FROM orders WHERE deleted_at IS NOT NULL")["c"]
+        n_pending = len(pending_receipt_ids(conn))
     return render(request, "admin/orders.html",
-                  {"orders": orders, "events": events, "rm": rm,
+                  {"orders": orders, "events": events, "rm": rm, "trash": trash,
+                   "n_trash": n_trash, "n_pending": n_pending, "protected": PROTECTED_STATUSES,
                    "f_status": status, "f_event": event_id, "f_flagged": flagged})
 
 
@@ -298,6 +308,7 @@ def admin_order(order_id: int, request: Request):
     return render(request, "admin/order.html", {
         "order": order, "event": event, "customer": customer, "items": items,
         "receipts": receipts, "sizes": sizes, "rm": rm,
+        "needs_double": _needs_double(order, len(receipts)),
     })
 
 
@@ -367,6 +378,133 @@ def admin_reprint(order_id: int, request: Request, background: BackgroundTasks):
     with db() as conn:
         audit(conn, admin_email(request), "order_reprint", "order", order_id, "")
     return RedirectResponse(f"/admin/orders/{order_id}", status_code=303)
+
+
+# --- delete / trash ---------------------------------------------------------
+# Orders with money involved need a second confirmation to delete.
+PROTECTED_STATUSES = ("reviewing", "paid", "printing", "ready")
+
+
+def _needs_double(order, n_receipts: int) -> bool:
+    return order["status"] in PROTECTED_STATUSES or n_receipts > 0
+
+
+@router.post("/orders/{order_id}/delete")
+def admin_delete(order_id: int, request: Request, confirm2: str = Form(""), back: str = Form("")):
+    with db() as conn:
+        order = one(conn, "SELECT * FROM orders WHERE id=? AND deleted_at IS NULL", (order_id,))
+        if not order:
+            return RedirectResponse("/admin/orders", status_code=303)
+        n = one(conn, "SELECT COUNT(*) c FROM receipts WHERE order_id=?", (order_id,))["c"]
+        if _needs_double(order, n) and confirm2 != order["order_no"]:
+            return RedirectResponse(f"/admin/orders/{order_id}?need_confirm=1", status_code=303)
+        actor = admin_email(request)
+        conn.execute("UPDATE orders SET deleted_at=datetime('now'), deleted_by=? WHERE id=?",
+                     (actor, order_id))
+        audit(conn, actor, "order_deleted", "order", order_id, f"{order['order_no']} ({order['status']})")
+    dest = back if back.startswith("/admin/orders") and not back.startswith(f"/admin/orders/{order_id}") else "/admin/orders"
+    return RedirectResponse(dest + ("&" if "?" in dest else "?") + "deleted=" + order["order_no"], status_code=303)
+
+
+@router.post("/orders/{order_id}/restore")
+def admin_restore(order_id: int, request: Request):
+    with db() as conn:
+        conn.execute("UPDATE orders SET deleted_at=NULL, deleted_by='' WHERE id=?", (order_id,))
+        audit(conn, admin_email(request), "order_restored", "order", order_id, "")
+    return RedirectResponse(f"/admin/orders/{order_id}", status_code=303)
+
+
+@router.post("/orders/{order_id}/purge")
+def admin_purge(order_id: int, request: Request, confirm2: str = Form("")):
+    """Delete for good (only from Trash). Receipt images go too."""
+    with db() as conn:
+        order = one(conn, "SELECT * FROM orders WHERE id=? AND deleted_at IS NOT NULL", (order_id,))
+        if not order or confirm2 != order["order_no"]:
+            return RedirectResponse("/admin/orders?view=trash", status_code=303)
+        files = [r["stored_path"] for r in query(conn, "SELECT stored_path FROM receipts WHERE order_id=?", (order_id,))]
+        conn.execute("DELETE FROM receipts WHERE order_id=?", (order_id,))
+        conn.execute("DELETE FROM order_items WHERE order_id=?", (order_id,))
+        conn.execute("DELETE FROM orders WHERE id=?", (order_id,))
+        audit(conn, admin_email(request), "order_purged", "order", order_id, order["order_no"])
+    for f in files:
+        if f:
+            (settings.data_path / f).unlink(missing_ok=True)
+    return RedirectResponse("/admin/orders?view=trash", status_code=303)
+
+
+# --- receipt OCR (re-run) ----------------------------------------------------
+@router.post("/receipts/{receipt_id}/rerun")
+def admin_rerun_receipt(receipt_id: int, request: Request, background: BackgroundTasks):
+    with db() as conn:
+        state = rerun_receipt(conn, receipt_id)
+        if state:
+            audit(conn, admin_email(request), "receipt_rerun", "order", state["order_id"], str(receipt_id))
+    if not state:
+        return RedirectResponse("/admin/orders", status_code=303)
+    if state.get("just_paid"):
+        background.add_task(after_receipt, state["order_id"], state)
+    return RedirectResponse(f"/admin/orders/{state['order_id']}?rerun={state['note']}", status_code=303)
+
+
+@router.post("/receipts/rescan")
+def admin_rescan(request: Request, background: BackgroundTasks):
+    background.add_task(rescan_pending, False)
+    with db() as conn:
+        audit(conn, admin_email(request), "receipt_rescan_all", "system", "", "")
+    return RedirectResponse("/admin/orders?rescan=started", status_code=303)
+
+
+# --- settings (DeepSeek API, notify email) ------------------------------------
+def _mask(key: str) -> str:
+    return ("•" * 8 + key[-4:]) if key else ""
+
+
+@router.get("/settings")
+def settings_page(request: Request):
+    from ..ocr import ai_config
+    with db() as conn:
+        cfg = ai_config(conn)
+        notify = get_setting(conn, "admin_notify_email", settings.admin_notify_email)
+        from_db = bool(get_setting(conn, "deepseek_api_key", ""))
+    import shutil as _sh
+    return render(request, "admin/settings.html", {
+        "cfg": cfg, "key_mask": _mask(cfg["key"]), "key_from_db": from_db, "notify": notify,
+        "tesseract": bool(_sh.which("tesseract")),
+    })
+
+
+@router.post("/settings")
+def settings_save(request: Request, background: BackgroundTasks,
+                  deepseek_api_key: str = Form(""), deepseek_model: str = Form("deepseek-chat"),
+                  deepseek_base_url: str = Form("https://api.deepseek.com"),
+                  admin_notify_email: str = Form(""), clear_key: str = Form("")):
+    with db() as conn:
+        if clear_key:
+            set_setting(conn, "deepseek_api_key", "")
+        elif deepseek_api_key.strip():
+            set_setting(conn, "deepseek_api_key", deepseek_api_key.strip())
+        set_setting(conn, "deepseek_model", deepseek_model.strip() or "deepseek-chat")
+        set_setting(conn, "deepseek_base_url", deepseek_base_url.strip() or "https://api.deepseek.com")
+        set_setting(conn, "admin_notify_email", admin_notify_email.strip())
+        audit(conn, admin_email(request), "settings_saved", "system", "",
+              "key changed" if deepseek_api_key.strip() or clear_key else "")
+    if deepseek_api_key.strip():
+        background.add_task(rescan_pending, False)  # new key: re-check stuck receipts now
+    return RedirectResponse("/admin/settings?saved=1", status_code=303)
+
+
+@router.post("/settings/test")
+def settings_test(request: Request):
+    """Send a sample receipt text to DeepSeek and show what it read."""
+    from ..ocr import ai_config, ai_parse, merge_ai, parse_text
+    sample = ("Maybank2u\nTransfer Successful\nAmount RM 4.00\nRecipient PROMEDIA CREATIVE SOLUTIONS\n"
+              "Reference No. 7712345678\nDate 06 Nov 2026 10:21:05")
+    with db() as conn:
+        cfg = ai_config(conn)
+    ai = ai_parse(sample, cfg)
+    result = merge_ai(parse_text(sample), ai)
+    ok = bool(ai) and result.get("amount_sen") == 400
+    return RedirectResponse(f"/admin/settings?test={'ok' if ok else 'fail'}", status_code=303)
 
 
 # --- maintenance -----------------------------------------------------------

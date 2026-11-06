@@ -16,7 +16,7 @@ Active development happens on the **`manual-payment`** branch. `main` stays clea
 - **SQLite** (single file under `DATA_DIR/SQlite/`). Access via the thin helpers in
   `app/database.py` — no ORM.
 - **uv** + `pyproject.toml` for dependencies.
-- **PaddleOCR + regex** for receipts (`app/ocr.py`), optional extra `ocr`.
+- **Tesseract + DeepSeek** for receipts (`app/ocr.py`): Tesseract reads the text, DeepSeek reads amount/ref/date (key in Admin → Settings or `DEEPSEEK_API_KEY`); regex fallback. Amount from AI must appear in the OCR text.
 - **WebDAV** to Nextcloud for photo originals + print output (`app/nextcloud.py`).
 - **gspread** for the Google-Sheet job list; **aiosmtplib** for email.
 - Background work via FastAPI `BackgroundTasks`; schedules via APScheduler

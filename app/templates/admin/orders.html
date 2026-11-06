@@ -1,8 +1,25 @@
 {% extends "base.html" %}
-{% block title %}Orders — Admin{% endblock %}
+{% block title %}{{ 'Trash' if trash else 'Orders' }} — Admin{% endblock %}
 {% block content %}
-<div class="spread"><h1>Orders</h1><a class="btn ghost sm" href="/admin">← Dashboard</a></div>
+<div class="spread"><h1>{{ 'Trash' if trash else 'Orders' }}</h1>
+  <div class="row" style="gap:8px">
+    {% if trash %}<a class="btn ghost sm" href="/admin/orders">← Orders</a>
+    {% else %}<a class="btn ghost sm" href="/admin/orders?view=trash">Trash ({{ n_trash }})</a>{% endif %}
+    <a class="btn ghost sm" href="/admin/settings">Settings</a>
+    <a class="btn ghost sm" href="/admin">← Dashboard</a>
+  </div>
+</div>
 
+{% if request.query_params.get('deleted') %}<div class="card" style="border-color:var(--ok)"><span class="ok">Order {{ request.query_params.get('deleted') }} moved to Trash.</span> <a href="/admin/orders?view=trash">Open Trash</a></div>{% endif %}
+{% if request.query_params.get('rescan') %}<div class="card" style="border-color:var(--ok)"><span class="ok">Re-checking receipts in the background. Refresh in a minute.</span></div>{% endif %}
+
+{% if not trash %}
+{% if n_pending %}
+<div class="card spread" style="border-color:var(--warn);margin-top:8px">
+  <span>{{ n_pending }} receipt(s) not verified yet.</span>
+  <form method="post" action="/admin/receipts/rescan" style="margin:0"><button class="btn sm">Run OCR again on all</button></form>
+</div>
+{% endif %}
 <form class="toolbar" method="get" action="/admin/orders">
   <select name="event"><option value="">All events</option>
     {% for e in events %}<option value="{{ e.id }}" {{ 'selected' if f_event==e.id|string }}>{{ e.name }}</option>{% endfor %}</select>
@@ -12,21 +29,38 @@
   <label class="row" style="gap:6px"><input type="checkbox" name="flagged" value="1" style="width:auto" {{ 'checked' if f_flagged }}> flagged</label>
   <button class="btn sm" type="submit">Filter</button>
 </form>
+{% endif %}
 
 <div class="card" style="margin-top:12px">
 <table>
-  <tr><th>Order</th><th>Customer</th><th>Event</th><th>Total</th><th>Paid</th><th>Status</th></tr>
+  <tr><th>Order</th><th>Customer</th><th>Event</th><th>Total</th><th>Paid</th><th>Status</th><th></th></tr>
   {% for o in orders %}
   <tr>
-    <td><a href="/admin/orders/{{ o.id }}"><strong>{{ o.order_no }}</strong></a><br><span class="note">{{ o.created_at }}</span></td>
+    <td><a href="/admin/orders/{{ o.id }}"><strong>{{ o.order_no }}</strong></a><br><span class="note">{{ o.created_at }}</span>
+      {% if trash %}<br><span class="note">deleted {{ o.deleted_at }} by {{ o.deleted_by }}</span>{% endif %}</td>
     <td>{{ o.cust_name or '—' }}<br><span class="note">{{ o.email }} · {{ o.phone_used }}</span></td>
     <td>{{ o.event_name }}</td>
     <td>{{ rm(o.total_sen) }}</td>
     <td>{{ rm(o.paid_sen) }}</td>
-    <td><span class="tag">{{ o.status }}</span></td>
+    <td><span class="tag">{{ o.status }}</span>{% if o.last_note %}<br><span class="note">OCR: {{ o.last_note }}</span>{% endif %}</td>
+    <td>
+      {% if trash %}
+        <div class="row" style="gap:6px">
+        <form method="post" action="/admin/orders/{{ o.id }}/restore" style="margin:0"><button class="btn ghost sm">Restore</button></form>
+        <form method="post" action="/admin/orders/{{ o.id }}/purge" style="margin:0" data-order-no="{{ o.order_no }}"
+              data-confirm="Delete {{ o.order_no }} FOREVER? Items and receipt images are removed."
+              data-confirm2="SECOND CHECK: this cannot be undone. Delete {{ o.order_no }} forever?">
+          <input type="hidden" name="confirm2" value=""><button class="btn danger sm">Delete forever</button></form>
+        </div>
+      {% else %}
+        {% with dbl = (o.status in protected or o.n_receipts > 0), back = request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}
+        {% include "admin/_delete_form.html" %}
+        {% endwith %}
+      {% endif %}
+    </td>
   </tr>
   {% endfor %}
 </table>
-{% if not orders %}<p class="muted">No orders.</p>{% endif %}
+{% if not orders %}<p class="muted">{{ 'Trash is empty.' if trash else 'No orders.' }}</p>{% endif %}
 </div>
 {% endblock %}

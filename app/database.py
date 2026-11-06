@@ -166,6 +166,12 @@ CREATE TABLE IF NOT EXISTS slides (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS app_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     ts        TEXT NOT NULL DEFAULT (datetime('now')),
@@ -220,6 +226,13 @@ def init_db() -> None:
             "ALTER TABLE events ADD COLUMN allow_pickup INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE events ADD COLUMN allow_post INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE orders ADD COLUMN pickup_location TEXT NOT NULL DEFAULT ''",
+            # soft delete (Trash): NULL = live order
+            "ALTER TABLE orders ADD COLUMN deleted_at TEXT",
+            "ALTER TABLE orders ADD COLUMN deleted_by TEXT NOT NULL DEFAULT ''",
+            # receipt OCR feedback
+            "ALTER TABLE receipts ADD COLUMN ocr_note TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE receipts ADD COLUMN ocr_engine TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE receipts ADD COLUMN ocr_checked_at TEXT",
         ):
             try:
                 conn.execute(stmt)
@@ -228,6 +241,20 @@ def init_db() -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+# --- admin-editable settings (DeepSeek key, notify email, ...) -------------
+def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
+    row = conn.execute("SELECT value FROM app_settings WHERE key=?", (key,)).fetchone()
+    return row["value"] if row and row["value"] != "" else default
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT INTO app_settings(key, value, updated_at) VALUES (?,?,datetime('now')) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+        (key, value),
+    )
 
 
 # --- tiny helpers ---------------------------------------------------------

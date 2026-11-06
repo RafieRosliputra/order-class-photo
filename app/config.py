@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     receipt_webp_quality: int = 50
     trash_retention_days: int = 90
     ocr_enabled: bool = True
+    ocr_tesseract_lang: str = "eng"        # tesseract language(s), e.g. "eng" or "eng+msa"
+    # DeepSeek reads the OCR text and returns amount/ref/date as JSON.
+    # These are defaults; the admin Settings page overrides them (stored in the DB).
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-chat"
+    deepseek_timeout: int = 25
+
+    # Admin notifications (paid / needs-review emails)
+    admin_notify_email: str = "rafierosliputra@gmail.com"
 
     # Google Sheets
     google_sa_json: str = ""

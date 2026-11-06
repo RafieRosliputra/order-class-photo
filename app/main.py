@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .database import init_db
 from .deps import render
+from .orders_service import rescan_pending
 from .routers import admin, auth, cart, checkout, orders, public, receipts
 from .tasks import shutdown_scheduler, start_scheduler
 
@@ -24,6 +26,7 @@ async def lifespan(app: FastAPI):
     settings.ensure_dirs()
     init_db()
     start_scheduler()
+    threading.Thread(target=rescan_pending, name="receipt-rescan", daemon=True).start()
     yield
     shutdown_scheduler()
 

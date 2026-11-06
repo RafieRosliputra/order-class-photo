@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&display=swap">
-<link rel="stylesheet" href="/static/css/style.css?v=20261102c">
+<link rel="stylesheet" href="/static/css/style.css?v=20261106a">
 {% block head %}{% endblock %}
 {% if umami_src and umami_id %}<script defer src="{{ umami_src }}" data-website-id="{{ umami_id }}"></script>{% endif %}
 </head>
@@ -39,6 +39,12 @@
       <a class="navlink" href="/login">{{ t('nav_login') }}</a>
     {% endif %}
   </nav>
+  {% set admin_who = request.headers.get(settings.admin_email_header, '') if request.url.path.startswith('/admin') else '' %}
+  {% if admin_who %}
+  <div class="whoami" title="{{ admin_who }}"><span class="role admin">{{ t('acct_admin') }}</span><span class="em">{{ admin_who }}</span></div>
+  {% elif customer %}
+  <div class="whoami" title="{{ customer.email }}"><span class="role">{{ t('acct_customer') }}</span><span class="em">{{ customer.email }}</span><a href="/logout?next={{ here }}">{{ t('nav_logout') }}</a></div>
+  {% endif %}
 </header>
 
 <main class="wrap">{% block content %}{% endblock %}</main>
@@ -85,7 +91,7 @@
   <span>WhatsApp</span>
 </a>
 
-<script src="/static/js/app.js?v=20261102c" defer></script>
+<script src="/static/js/app.js?v=20261106a" defer></script>
 <script src="/static/js/pwa.js" defer></script>
 {% block scripts %}{% endblock %}
 </body>
