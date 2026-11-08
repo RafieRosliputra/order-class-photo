@@ -346,3 +346,15 @@ body.chk-lock{overflow:hidden}
 .chk-steps li.done{color:var(--ink)}
 .chk-steps li.done::before{border-color:var(--ok);background:var(--ok)}
 @media (prefers-reduced-motion: reduce){.chk-spinner{animation:none}.chk-bar span{transition:none}}
+
+/* password-protected gallery */
+.locked-wrap{display:flex;justify-content:center;padding:28px 0}
+.locked-card{width:100%;max-width:400px;text-align:center}
+.locked-card label{text-align:left}
+.locked-icon{width:56px;height:56px;margin:0 auto;border-radius:50%;background:var(--teal-soft);color:var(--teal-ink);
+  display:flex;align-items:center;justify-content:center}
+.ec-locked{flex-direction:column;gap:6px}
+.ec-lock-tag{font-size:12px;font-weight:600;color:var(--teal-ink)}
+/* admin: click-to-copy fields */
+input[data-copy-click]{cursor:copy}
+input[data-copy-click].copied{border-color:var(--ok);background:#eef7f1}

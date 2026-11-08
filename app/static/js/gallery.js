@@ -46,7 +46,9 @@
       addBtn.disabled = false;
       if (d.error) {
         var key = 'err' + d.error.replace(/(^|_)([a-z])/g, function (m, a, c) { return c.toUpperCase(); });
-        jsToast('⚠ ' + (grid.dataset[key] || grid.dataset.errGeneric || d.error)); return;
+        jsToast('⚠ ' + (grid.dataset[key] || grid.dataset.errGeneric || d.error));
+        if (d.error === 'gallery_locked') setTimeout(function () { location.reload(); }, 1800);
+        return;
       }
       flyToCart(Array.from(selected));
       setTimeout(function () { window.setCartBadge(d.count); }, flyMs);

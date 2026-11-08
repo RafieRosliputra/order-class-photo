@@ -4,13 +4,14 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 
-from .. import i18n, imaging, nextcloud
+from .. import event_access, i18n, imaging, nextcloud
 from ..config import settings
 from ..database import db, one, query
-from ..deps import LANG_COOKIE, render
+from ..deps import LANG_COOKIE, current_customer, read_cart, render
+from ..pricing import parse_cart_key
 from ..utils import local_now
 
 router = APIRouter()
@@ -79,13 +80,18 @@ def home(request: Request):
         events = [e for e in events if _event_open(e)]
         slides = query(conn, "SELECT * FROM slides WHERE active=1 ORDER BY sort, id")
         covers = {}
+        locked = {e["id"] for e in events if event_access.is_locked(e)
+                  and not event_access.has_access(request, e)}
         for e in events:
+            if e["id"] in locked:
+                continue
             row = one(conn, """SELECT p.id FROM photos p JOIN classes c ON c.id=p.class_id
                                WHERE p.event_id=? ORDER BY c.school, c.name, p.sort, p.filename
                                LIMIT 1""", (e["id"],))
             if row:
                 covers[e["id"]] = row["id"]
-    return render(request, "home.html", {"events": events, "slides": slides, "covers": covers})
+    return render(request, "home.html", {"events": events, "slides": slides, "covers": covers,
+                                         "locked": locked})
 
 
 @router.get("/terms")
@@ -99,6 +105,12 @@ def event_gallery(slug: str, request: Request):
         event = one(conn, "SELECT * FROM events WHERE slug=?", (slug,))
         if not event:
             return render(request, "not_found.html", {})
+        if not event_access.has_access(request, event):
+            if event_access.key_ok(event, request.query_params.get("k", "")):
+                resp = RedirectResponse(f"/e/{slug}", status_code=303)   # drop the key from the URL
+                event_access.grant(resp, event)
+                return resp
+            return render(request, "gallery_locked.html", {"event": event, "error": ""})
         classes = query(conn, "SELECT * FROM classes WHERE event_id=? ORDER BY school, sort, name",
                         (event["id"],))
         photos = query(
@@ -146,19 +158,58 @@ def _serve_cached(rel_path: str, photo, kind: str) -> Response:
     return resp
 
 
+def _photo_allowed(request: Request, photo) -> bool:
+    """Locked events: only viewers with access, or a customer whose cart / order
+    already holds this photo (so cart and order pages keep their thumbnails)."""
+    with db() as conn:
+        event = one(conn, "SELECT * FROM events WHERE id=?", (photo["event_id"],))
+    if not event or event_access.has_access(request, event):
+        return True
+    if any((k := parse_cart_key(key)) and k[1] == photo["id"] for key in read_cart(request)):
+        return True
+    cust = current_customer(request)
+    if not cust:
+        return False
+    with db() as conn:
+        return bool(one(conn, """SELECT 1 FROM order_items i JOIN orders o ON o.id=i.order_id
+                                 WHERE o.customer_id=? AND i.photo_id=? LIMIT 1""",
+                        (cust["id"], photo["id"])))
+
+
 @router.get("/p/{photo_id}/thumb.webp")
-def photo_thumb(photo_id: int):
+def photo_thumb(photo_id: int, request: Request):
     with db() as conn:
         photo = one(conn, "SELECT * FROM photos WHERE id=?", (photo_id,))
     if not photo:
         return Response(status_code=404)
+    if not _photo_allowed(request, photo):
+        return Response(status_code=403)
     return _serve_cached(photo["thumb_path"], photo, "thumb")
 
 
 @router.get("/p/{photo_id}/large.webp")
-def photo_large(photo_id: int):
+def photo_large(photo_id: int, request: Request):
     with db() as conn:
         photo = one(conn, "SELECT * FROM photos WHERE id=?", (photo_id,))
     if not photo:
         return Response(status_code=404)
+    if not _photo_allowed(request, photo):
+        return Response(status_code=403)
     return _serve_cached(photo["preview_path"], photo, "preview")
+
+
+@router.post("/e/{slug}/unlock")
+def event_unlock(slug: str, request: Request, password: str = Form("")):
+    with db() as conn:
+        event = one(conn, "SELECT * FROM events WHERE slug=?", (slug,))
+    if not event:
+        return render(request, "not_found.html", {})
+    ip = event_access.client_ip(request)
+    if event_access.too_many_fails(ip, event["id"]):
+        return render(request, "gallery_locked.html", {"event": event, "error": "locked_many"})
+    if not event_access.password_ok(event, password):
+        event_access.record_fail(ip, event["id"])
+        return render(request, "gallery_locked.html", {"event": event, "error": "locked_wrong"})
+    resp = RedirectResponse(f"/e/{slug}", status_code=303)
+    event_access.grant(resp, event)
+    return resp

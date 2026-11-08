@@ -44,6 +44,21 @@
   });
 
   // "Copy link" buttons.
+  // Read-only field that copies itself when clicked (admin share links / password).
+  document.querySelectorAll('input[data-copy-click]').forEach(function (inp) {
+    inp.addEventListener('click', function () {
+      inp.select();
+      var done = function () {
+        inp.classList.add('copied');
+        var hint = document.querySelector('.copy-hint');
+        if (hint) { hint.dataset.orig = hint.dataset.orig || hint.textContent; hint.textContent = '✓ Disalin: ' + inp.value; }
+        setTimeout(function () { inp.classList.remove('copied'); if (hint) hint.textContent = hint.dataset.orig; }, 1800);
+      };
+      if (navigator.clipboard) navigator.clipboard.writeText(inp.value).then(done, function () { document.execCommand('copy'); done(); });
+      else { document.execCommand('copy'); done(); }
+    });
+  });
+
   document.querySelectorAll('[data-copy]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var src = document.querySelector(btn.dataset.copy);

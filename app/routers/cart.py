@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
+from .. import event_access
 from ..database import db, one, query
 from ..deps import cart_count, cart_event_id, read_cart, render, write_cart
 from ..pricing import cart_subtotal, cart_unsized, parse_cart_key
@@ -30,6 +31,9 @@ async def cart_add(request: Request):
         cart = {}
 
     with db() as conn:
+        event = one(conn, "SELECT * FROM events WHERE id=?", (event_id,))
+        if not event or not event_access.has_access(request, event):
+            return JSONResponse({"error": "gallery_locked"}, status_code=403)
         if not _default_size_id(conn, event_id):
             return JSONResponse({"error": "no_sizes"}, status_code=400)
         valid = {r["id"] for r in query(

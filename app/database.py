@@ -259,6 +259,9 @@ def init_db() -> None:
             "ALTER TABLE orders ADD COLUMN refunded_at TEXT",
             # print batch the order belongs to (set when it is paid)
             "ALTER TABLE orders ADD COLUMN batch_id INTEGER REFERENCES batches(id)",
+            # gallery password (empty = open) + secret key for the no-password direct link
+            "ALTER TABLE events ADD COLUMN access_password TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE events ADD COLUMN access_key TEXT NOT NULL DEFAULT ''",
         ):
             try:
                 conn.execute(stmt)

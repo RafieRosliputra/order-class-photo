@@ -26,7 +26,7 @@
   <input id="f-search" type="search" placeholder="{{ t('search') }}">
 </div>
 
-<div class="grid" id="grid" data-event-id="{{ event.id }}" data-added-label="{{ t('added_toast') }}" data-in-cart-label="{{ t('already_in_cart') }}" data-err-no-sizes="{{ t('err_no_sizes') }}" data-err-generic="{{ t('err_generic') }}">
+<div class="grid" id="grid" data-event-id="{{ event.id }}" data-added-label="{{ t('added_toast') }}" data-in-cart-label="{{ t('already_in_cart') }}" data-err-no-sizes="{{ t('err_no_sizes') }}" data-err-gallery-locked="{{ t('err_gallery_locked') }}" data-err-generic="{{ t('err_generic') }}">
   {% for p in photos %}
   <div class="cell{% if p.width and p.height and p.width > p.height %} land{% endif %}" data-id="{{ p.id }}" data-school="{{ p.school }}" data-class="{{ p.class_name }}"
        data-fname="{{ p.filename }}" data-large="/p/{{ p.id }}/large.webp"
@@ -48,4 +48,4 @@
 
 <div class="lightbox" id="lightbox"><button class="close" aria-label="{{ t('close') }}">×</button><div class="img"></div></div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/gallery.js?v=20261102c" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/js/gallery.js?v=20261109a" defer></script>{% endblock %}

@@ -9,10 +9,10 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import backup, batches, imaging, nextcloud
+from .. import backup, batches, event_access, imaging, nextcloud
 from ..config import settings
 from ..database import audit, db, get_setting, one, query, set_setting
-from ..deps import render
+from ..deps import public_base, render
 from ..pricing import compute_order_totals
 from ..email_send import send_receipt_rejected
 from ..orders_service import (after_receipt, customer_wa_link, mark_refunded, pending_receipt_ids,
@@ -124,6 +124,9 @@ def event_admin(event_id: int, request: Request):
         event = one(conn, "SELECT * FROM events WHERE id=?", (event_id,))
         if not event:
             return render(request, "not_found.html", {})
+        if not event["access_key"]:   # every event gets a secret direct link
+            conn.execute("UPDATE events SET access_key=? WHERE id=?", (event_access.new_key(), event_id))
+            event = one(conn, "SELECT * FROM events WHERE id=?", (event_id,))
         sizes = query(conn, "SELECT * FROM sizes WHERE event_id=? ORDER BY sort, price_sen", (event_id,))
         classes = query(conn, "SELECT c.*, (SELECT COUNT(*) FROM photos p WHERE p.class_id=c.id) n FROM classes c WHERE event_id=? ORDER BY school, name", (event_id,))
         nphotos = one(conn, "SELECT COUNT(*) c FROM photos WHERE event_id=?", (event_id,))["c"]
@@ -131,6 +134,8 @@ def event_admin(event_id: int, request: Request):
     return render(request, "admin/event.html", {
         "event": event, "sizes": sizes, "classes": classes, "nphotos": nphotos,
         "bsum": bsum, "rm": rm, "instances": settings.nc_instances(),
+        "locked": event_access.is_locked(event),
+        "direct_url": event_access.direct_url(public_base(request), event),
     })
 
 
@@ -143,7 +148,7 @@ async def event_edit(event_id: int, request: Request, name: str = Form(...), eve
                pay_qrpay_image: str = Form(""), postage_west: str = Form("10"),
                postage_east: str = Form("18"), qr_file: UploadFile | None = File(None),
                qr_remove: str = Form(""), allow_pickup: str = Form(""),
-               allow_post: str = Form("")):
+               allow_post: str = Form(""), access_password: str = Form("")):
     pick, post = _delivery_flags(allow_pickup, allow_post)
     pickup_location = clean_pickup_text(pickup_location)
     qr_error = False
@@ -160,16 +165,44 @@ async def event_edit(event_id: int, request: Request, name: str = Form(...), eve
             """UPDATE events SET name=?, event_date=?, nextcloud_id=?, nextcloud_folder=?,
                    class_delimiter=?, close_date=?, status=?, pickup_location=?, pay_bank_no=?,
                    pay_qrpay_image=?, postage_west_sen=?, postage_east_sen=?,
-                   allow_pickup=?, allow_post=? WHERE id=?""",
+                   allow_pickup=?, allow_post=?, access_password=? WHERE id=?""",
             (name, event_date, nextcloud_id, nextcloud_folder.strip("/"), class_delimiter or " - ",
              close_date, status, pickup_location, pay_bank_no, pay_qrpay_image,
-             to_sen(postage_west or 0), to_sen(postage_east or 0), pick, post, event_id),
+             to_sen(postage_west or 0), to_sen(postage_east or 0), pick, post,
+             access_password.strip()[:64], event_id),
         )
         audit(conn, admin_email(request), "event_edited", "event", event_id, name)
         if qr_url:
             audit(conn, admin_email(request), "event_qr_uploaded", "event", event_id, qr_url)
     suffix = "?qr_error=1" if qr_error else ""
     return RedirectResponse(f"/admin/events/{event_id}{suffix}", status_code=303)
+
+
+@router.post("/events/{event_id}/rotate-link")
+def event_rotate_link(event_id: int, request: Request):
+    """New secret key: the old direct link and everyone's saved access stop working."""
+    with db() as conn:
+        conn.execute("UPDATE events SET access_key=? WHERE id=?", (event_access.new_key(), event_id))
+        audit(conn, admin_email(request), "event_link_rotated", "event", event_id, "")
+    return RedirectResponse(f"/admin/events/{event_id}?link=new", status_code=303)
+
+
+@router.get("/events/{event_id}/share")
+def event_share(event_id: int, request: Request):
+    """Big QR + link + password to show on screen, print or screenshot."""
+    with db() as conn:
+        event = one(conn, "SELECT * FROM events WHERE id=?", (event_id,))
+    if not event:
+        return render(request, "not_found.html", {})
+    url = f"{public_base(request)}/e/{event['slug']}"
+    try:
+        qr = event_access.qr_svg(url)
+    except Exception:  # noqa: BLE001
+        log.exception("share QR failed for event %s", event_id)
+        qr = ""
+    return render(request, "admin/event_share.html", {
+        "event": event, "url": url, "qr": qr, "locked": event_access.is_locked(event),
+    })
 
 
 # --- sizes -----------------------------------------------------------------

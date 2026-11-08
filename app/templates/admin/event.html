@@ -4,12 +4,41 @@
 <div class="spread"><h1>{{ event.name }}</h1>
   <a class="btn ghost sm" href="/admin/orders?event={{ event.id }}">Orders</a></div>
 {% set share_url = public_base ~ '/e/' ~ event.slug %}
-<div class="card share" style="margin:12px 0">
-  <label for="share-url">Link untuk customer</label>
+{% set wa_text = event.name ~ ' — ' ~ share_url ~ ((' · Password: ' ~ event.access_password) if locked else '') %}
+<div class="card share stack" style="margin:12px 0" id="share">
+  <div class="spread">
+    <label for="share-url" style="margin:0">Link untuk customer</label>
+    <span class="tag {{ 'flag' if locked }}">{{ '🔒 Ada password' if locked else 'Tanpa password' }}</span>
+  </div>
+  {% if request.query_params.get('link') == 'new' %}<p class="ok" style="margin:0">Link terus baru dibuat. Link lama dan akses yang disimpan customer tak jalan lagi.</p>{% endif %}
+
   <div class="row" style="gap:8px">
-    <input id="share-url" value="{{ share_url }}" readonly onclick="this.select()">
-    <button type="button" class="btn sm" data-copy="#share-url">Copy link</button>
-    <a class="btn ghost sm" href="https://wa.me/?text={{ (event.name ~ ' — ' ~ share_url)|urlencode }}" target="_blank" rel="noopener">Kongsi WhatsApp</a>
+    <input id="share-url" value="{{ share_url }}" readonly data-copy-click title="Klik untuk copy">
+    <a class="btn ghost sm" style="white-space:nowrap" href="{{ share_url }}" target="_blank" rel="noopener">Buka sebagai customer</a>
+  </div>
+  {% if locked %}
+  <div class="row" style="gap:8px;align-items:center">
+    <span class="note" style="white-space:nowrap">Password</span>
+    <input id="share-pw" value="{{ event.access_password }}" readonly data-copy-click title="Klik untuk copy" style="max-width:220px">
+  </div>
+
+  <label for="direct-url" style="margin:6px 0 0">Link terus (tanpa password)</label>
+  <div class="row" style="gap:8px">
+    <input id="direct-url" value="{{ direct_url }}" readonly data-copy-click title="Klik untuk copy">
+    <a class="btn ghost sm" style="white-space:nowrap" href="{{ direct_url }}" target="_blank" rel="noopener">Buka sebagai customer</a>
+  </div>
+  <p class="note" style="margin:0">Sesiapa yang ada link ini terus masuk galeri tanpa password (diingat 30 hari).</p>
+  {% endif %}
+  <p class="note copy-hint" style="margin:0">Klik pada link atau password untuk copy.</p>
+
+  <div class="row" style="gap:8px;flex-wrap:wrap">
+    <a class="btn sm" href="/admin/events/{{ event.id }}/share" target="_blank" rel="noopener">Tunjuk QR, link &amp; password</a>
+    <a class="btn ghost sm" href="https://wa.me/?text={{ wa_text|urlencode }}" target="_blank" rel="noopener">Kongsi WhatsApp</a>
+    {% if locked %}
+    <form method="post" action="/admin/events/{{ event.id }}/rotate-link" style="margin:0"
+          data-confirm="Tukar link terus? Link terus lama berhenti berfungsi, dan customer yang sudah masuk perlu masukkan password atau link baru semula.">
+      <button class="btn ghost sm" type="submit">Tukar link</button></form>
+    {% endif %}
   </div>
 </div>
 {% if request.query_params.get('import') %}<p class="ok">Import started in background — refresh in a moment.</p>{% endif %}
@@ -23,6 +52,9 @@
       <div class="field"><label>Event date</label><input name="event_date" type="date" value="{{ event.event_date }}"></div>
       <div class="field"><label>Close date</label><input name="close_date" type="date" value="{{ event.close_date }}"></div>
     </div>
+    <div class="field"><label>Password galeri</label>
+      <input name="access_password" value="{{ event.access_password }}" maxlength="64" autocomplete="off" placeholder="Kosongkan = tanpa password">
+      <span class="note">Customer perlu masukkan password ini sebelum nampak gambar. Kosongkan untuk galeri terbuka.</span></div>
     <div class="field"><label>Status</label>
       <select name="status"><option value="open" {{ 'selected' if event.status=='open' }}>open</option>
         <option value="closed" {{ 'selected' if event.status=='closed' }}>closed</option></select></div>

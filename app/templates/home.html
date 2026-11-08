@@ -9,7 +9,12 @@
 <div class="eventlist">
   {% for e in events %}
   <a class="eventcard" href="/e/{{ e.slug }}">
-    {% if covers.get(e.id) %}
+    {% if e.id in locked %}
+    <div class="ec-top ec-empty ec-locked">
+      <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>
+      <span class="ec-lock-tag">{{ t('locked_badge') }}</span>
+    </div>
+    {% elif covers.get(e.id) %}
     <div class="ec-top" style="background-image:url('/p/{{ covers[e.id] }}/thumb.webp')"></div>
     {% else %}
     <div class="ec-top ec-empty">
